@@ -3,13 +3,13 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
 
-export default function ExploreScreen() {
+export default function WorkoutsScreen() {
   const { currentTheme } = useTheme();
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ThemedView style={styles.container}>
-        <ThemedText style={styles.title}>Explore</ThemedText>
+        <ThemedText style={styles.title}>Workouts</ThemedText>
         <ThemedText style={styles.comingSoon}>Coming Soon!</ThemedText>
       </ThemedView>
     </SafeAreaView>
@@ -35,4 +35,4 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     textAlign: 'center',
   },
-});
+}); 

@@ -3,24 +3,37 @@
  * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
  */
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+/**
+ * Solo Leveling theme colors
+ */
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    text: '#FBE4D8',
+    background: '#190019',
+    tint: '#522B5B',
+    icon: '#DFB6B2',
+    tabIconDefault: '#DFB6B2',
+    tabIconSelected: '#FBE4D8',
+    primary: '#190019',
+    secondary: '#2B124C',
+    accent: '#522B5B',
+    accent2: '#854F6C',
+    textSecondary: '#DFB6B2',
+    textPrimary: '#FBE4D8',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    text: '#FBE4D8',
+    background: '#190019',
+    tint: '#522B5B',
+    icon: '#DFB6B2',
+    tabIconDefault: '#DFB6B2',
+    tabIconSelected: '#FBE4D8',
+    primary: '#190019',
+    secondary: '#2B124C',
+    accent: '#522B5B',
+    accent2: '#854F6C',
+    textSecondary: '#DFB6B2',
+    textPrimary: '#FBE4D8',
   },
 };

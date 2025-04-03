@@ -1,39 +1,37 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { StatusBar } from 'expo-status-bar';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 import { useEffect } from 'react';
-import 'react-native-reanimated';
+import { auth } from '@/config/firebase';
+import { useRouter, useSegments } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 
-import { useColorScheme } from '@/hooks/useColorScheme';
-
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
-
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
+function useProtectedRoute() {
+  const segments = useSegments();
+  const router = useRouter();
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      const inAuthGroup = segments[0] === 'auth';
+      
+      if (!user && !inAuthGroup) {
+        // If user is not signed in and the initial segment is not auth, redirect to login
+        router.replace('/auth/login');
+      } else if (user && inAuthGroup) {
+        // If user is signed in and the initial segment is auth, redirect to home
+        router.replace('/(tabs)');
+      }
+    });
 
-  if (!loaded) {
-    return null;
-  }
+    return unsubscribe;
+  }, [segments]);
+}
+
+export default function RootLayout() {
+  useProtectedRoute();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
+    <ThemeProvider>
+      <Stack screenOptions={{ headerShown: false }} />
     </ThemeProvider>
   );
 }
