@@ -1,4 +1,4 @@
-import { StyleSheet, View, ScrollView, TouchableOpacity, SafeAreaView, Platform, StatusBar } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, SafeAreaView } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -8,8 +8,8 @@ import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
 interface UserStats {
+  username: string;
   level: number;
-  xp: number;
   streak: number;
   coins: number;
   skills: {
@@ -17,7 +17,6 @@ interface UserStats {
     agility: number;
     endurance: number;
   };
-  username?: string;
 }
 
 export default function DashboardScreen() {
@@ -26,41 +25,42 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadUserStats() {
-      if (!auth.currentUser) return;
-
-      try {
-        const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setUserStats({
-            level: userData.progression.level,
-            xp: userData.progression.xp,
-            streak: userData.progression.streak,
-            coins: userData.coins,
-            skills: userData.skills,
-            username: userData.username,
-          });
-        }
-      } catch (error) {
-        console.error('Error loading user stats:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     loadUserStats();
   }, []);
 
-  const cardStyle = {
-    ...styles.card,
-    backgroundColor: currentTheme.colors.background,
-    borderColor: currentTheme.colors.border,
-  };
+  async function loadUserStats() {
+    if (!auth.currentUser) return;
+
+    try {
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        setUserStats({
+          username: userData.username,
+          level: userData.level || 1,
+          streak: userData.streak || 0,
+          coins: userData.coins || 0,
+          skills: {
+            strength: userData.skills?.strength || 1,
+            agility: userData.skills?.agility || 1,
+            endurance: userData.skills?.endurance || 1,
+          },
+        });
+      }
+    } catch (error) {
+      console.error('Error loading user stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!currentTheme) {
+    return null; // Or a loading screen
+  }
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
         <ThemedView style={styles.container}>
           <ThemedText>Loading...</ThemedText>
         </ThemedView>
@@ -69,122 +69,71 @@ export default function DashboardScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
       <ThemedView style={styles.container}>
-        <ScrollView 
-          style={styles.scrollView} 
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
+        <View style={styles.welcomeContainer}>
+          <ThemedText style={styles.welcomeText}>Welcome,</ThemedText>
+          <ThemedText style={styles.username}>{userStats?.username}</ThemedText>
+        </View>
+
+        <View style={styles.statsContainer}>
+          <View style={[styles.statCard, { backgroundColor: currentTheme.colors.card }]}>
+            <MaterialCommunityIcons name="star" size={24} color={currentTheme.colors.accent} />
+            <ThemedText style={styles.statValue}>Level {userStats?.level}</ThemedText>
+            <ThemedText style={styles.statLabel}>Level</ThemedText>
+          </View>
+
+          <View style={[styles.statCard, { backgroundColor: currentTheme.colors.card }]}>
+            <MaterialCommunityIcons name="fire" size={24} color={currentTheme.colors.accent} />
+            <ThemedText style={styles.statValue}>{userStats?.streak} Days</ThemedText>
+            <ThemedText style={styles.statLabel}>Streak</ThemedText>
+          </View>
+
+          <View style={[styles.statCard, { backgroundColor: currentTheme.colors.card }]}>
+            <MaterialCommunityIcons name="currency-usd" size={24} color={currentTheme.colors.accent} />
+            <ThemedText style={styles.statValue}>{userStats?.coins}</ThemedText>
+            <ThemedText style={styles.statLabel}>Coins</ThemedText>
+          </View>
+        </View>
+
+        <View style={styles.skillsSection}>
+          <ThemedText style={styles.sectionTitle}>Skills</ThemedText>
+          <View style={styles.skillsContainer}>
+            <View style={[styles.skillCard, { backgroundColor: currentTheme.colors.card }]}>
+              <MaterialCommunityIcons name="arm-flex" size={24} color={currentTheme.colors.accent} />
+              <ThemedText style={styles.skillValue}>Lvl {userStats?.skills.strength}</ThemedText>
+              <ThemedText style={styles.skillLabel}>Strength</ThemedText>
+            </View>
+
+            <View style={[styles.skillCard, { backgroundColor: currentTheme.colors.card }]}>
+              <MaterialCommunityIcons name="run-fast" size={24} color={currentTheme.colors.accent} />
+              <ThemedText style={styles.skillValue}>Lvl {userStats?.skills.agility}</ThemedText>
+              <ThemedText style={styles.skillLabel}>Agility</ThemedText>
+            </View>
+
+            <View style={[styles.skillCard, { backgroundColor: currentTheme.colors.card }]}>
+              <MaterialCommunityIcons name="heart-pulse" size={24} color={currentTheme.colors.accent} />
+              <ThemedText style={styles.skillValue}>Lvl {userStats?.skills.endurance}</ThemedText>
+              <ThemedText style={styles.skillLabel}>Endurance</ThemedText>
+            </View>
+          </View>
+        </View>
+
+        <TouchableOpacity 
+          style={[styles.startWorkoutButton, { backgroundColor: currentTheme.colors.accent }]}
+          onPress={() => {/* TODO: Implement workout start */}}
         >
-          <View style={styles.header}>
-            <View style={styles.welcomeContainer}>
-              <ThemedText style={styles.welcomeText}>Welcome, </ThemedText>
-              <ThemedText style={styles.username}>{userStats?.username || 'User'}</ThemedText>
-            </View>
-          </View>
+          <MaterialCommunityIcons name="play-circle" size={24} color={currentTheme.colors.textPrimary} />
+          <ThemedText style={styles.startWorkoutText}>Start Workout</ThemedText>
+        </TouchableOpacity>
 
-          {/* Stats Overview */}
-          <View style={styles.statsGrid}>
-            <View style={[cardStyle, styles.statsCard]}>
-              <MaterialCommunityIcons 
-                name="star" 
-                size={24} 
-                color={currentTheme.colors.accent} 
-              />
-              <ThemedText style={styles.statValue}>Level {userStats?.level}</ThemedText>
-              <ThemedText style={styles.statLabel}>Level</ThemedText>
-            </View>
-
-            <View style={[cardStyle, styles.statsCard]}>
-              <MaterialCommunityIcons 
-                name="fire" 
-                size={24} 
-                color={currentTheme.colors.accent} 
-              />
-              <ThemedText style={styles.statValue}>{userStats?.streak} Days</ThemedText>
-              <ThemedText style={styles.statLabel}>Streak</ThemedText>
-            </View>
-
-            <View style={[cardStyle, styles.statsCard]}>
-              <MaterialCommunityIcons 
-                name="coin" 
-                size={24} 
-                color={currentTheme.colors.accent} 
-              />
-              <ThemedText style={styles.statValue}>{userStats?.coins}</ThemedText>
-              <ThemedText style={styles.statLabel}>Coins</ThemedText>
-            </View>
-          </View>
-
-          {/* Skills Section */}
-          <View style={[cardStyle, styles.skillsCard]}>
-            <ThemedText style={styles.sectionTitle}>Skills</ThemedText>
-            <View style={styles.skillsGrid}>
-              <View style={styles.skillItem}>
-                <MaterialCommunityIcons 
-                  name="arm-flex" 
-                  size={24} 
-                  color={currentTheme.colors.accent} 
-                />
-                <ThemedText style={styles.skillValue}>
-                  Lvl {userStats?.skills.strength}
-                </ThemedText>
-                <ThemedText style={styles.skillLabel}>Strength</ThemedText>
-              </View>
-
-              <View style={styles.skillItem}>
-                <MaterialCommunityIcons 
-                  name="run-fast" 
-                  size={24} 
-                  color={currentTheme.colors.accent} 
-                />
-                <ThemedText style={styles.skillValue}>
-                  Lvl {userStats?.skills.agility}
-                </ThemedText>
-                <ThemedText style={styles.skillLabel}>Agility</ThemedText>
-              </View>
-
-              <View style={styles.skillItem}>
-                <MaterialCommunityIcons 
-                  name="heart-pulse" 
-                  size={24} 
-                  color={currentTheme.colors.accent} 
-                />
-                <ThemedText style={styles.skillValue}>
-                  Lvl {userStats?.skills.endurance}
-                </ThemedText>
-                <ThemedText style={styles.skillLabel}>Endurance</ThemedText>
-              </View>
-            </View>
-          </View>
-
-          {/* Quick Actions */}
-          <View style={styles.quickActions}>
-            <TouchableOpacity 
-              style={[cardStyle, styles.actionButton]}
-              onPress={() => {/* TODO: Start Workout */}}
-            >
-              <MaterialCommunityIcons 
-                name="play-circle" 
-                size={24} 
-                color={currentTheme.colors.accent} 
-              />
-              <ThemedText style={styles.actionText}>Start Workout</ThemedText>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[cardStyle, styles.actionButton]}
-              onPress={() => {/* TODO: View Progress */}}
-            >
-              <MaterialCommunityIcons 
-                name="chart-line" 
-                size={24} 
-                color={currentTheme.colors.accent} 
-              />
-              <ThemedText style={styles.actionText}>View Progress</ThemedText>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
+        <TouchableOpacity 
+          style={[styles.viewProgressButton, { borderColor: currentTheme.colors.border }]}
+          onPress={() => {/* TODO: Implement progress view */}}
+        >
+          <MaterialCommunityIcons name="chart-line" size={24} color={currentTheme.colors.accent} />
+          <ThemedText style={styles.viewProgressText}>View Progress</ThemedText>
+        </TouchableOpacity>
       </ThemedView>
     </SafeAreaView>
   );
@@ -193,93 +142,97 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   container: {
     flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
     padding: 20,
-    paddingBottom: 40,
-  },
-  header: {
-    marginBottom: 24,
-    marginTop: 20,
   },
   welcomeContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
+    marginBottom: 30,
   },
   welcomeText: {
     fontSize: 24,
     opacity: 0.7,
   },
   username: {
-    fontSize: 24,
+    fontSize: 32,
     fontWeight: 'bold',
   },
-  statsGrid: {
+  statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 30,
   },
-  card: {
-    borderRadius: 12,
-    padding: 15,
-    borderWidth: 1,
-  },
-  statsCard: {
+  statCard: {
     flex: 1,
-    marginHorizontal: 5,
     alignItems: 'center',
+    padding: 15,
+    borderRadius: 12,
+    marginHorizontal: 5,
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
-    marginVertical: 5,
+    marginTop: 5,
   },
   statLabel: {
     fontSize: 12,
     opacity: 0.7,
+    marginTop: 2,
   },
-  skillsCard: {
-    marginBottom: 20,
+  skillsSection: {
+    marginBottom: 30,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 15,
   },
-  skillsGrid: {
+  skillsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
   },
-  skillItem: {
+  skillCard: {
+    flex: 1,
     alignItems: 'center',
+    padding: 15,
+    borderRadius: 12,
+    marginHorizontal: 5,
   },
   skillValue: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginVertical: 5,
+    marginTop: 5,
   },
   skillLabel: {
     fontSize: 12,
     opacity: 0.7,
+    marginTop: 2,
   },
-  quickActions: {
-    gap: 10,
-  },
-  actionButton: {
+  startWorkoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-    gap: 10,
+    justifyContent: 'center',
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 15,
   },
-  actionText: {
+  startWorkoutText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    marginLeft: 10,
+  },
+  viewProgressButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 15,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  viewProgressText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 10,
   },
 });
