@@ -34,9 +34,3 @@ Functional Training    Squats                    Reps            reps         1 
                        Medicine Ball Throws      Reps            reps         1 XP
                        Kettlebell Swings         Reps            reps         1 XP
 
-Group & Specialized    Bootcamp                  Time/Session    session      2 XP
-                       Spinning/Indoor Cycling   Distance/Time   km           2 XP
-                       Dance Fitness             Time            minutes      2 XP
-                       Barre                     Time/Session    session      2 XP
-                       CrossFit                  Rounds          round        2 XP
-                       Low-Impact Classes        Time/Session    session      2 XP

@@ -1,4 +1,4 @@
-import { StyleSheet, View, TouchableOpacity, ScrollView, Platform, StatusBar, Modal, TextInput, Animated, Dimensions } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ScrollView, Platform, StatusBar, Modal, TextInput, Animated, Dimensions, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -8,64 +8,64 @@ import { useState, useEffect } from 'react';
 import { auth, db } from '@/config/firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { WorkoutProgress, UserStats, calculateLevel } from '@/types/workout';
-
-interface DailyWorkout {
-  id: string;
-  name: string;
-  icon: string;
-  currentValue: number;
-  targetValue: number;
-  unit: string;
-  completed: boolean;
-  lastUpdated: number;
-}
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { FontAwesome } from '@expo/vector-icons';
 
 interface DashboardStats {
   username: string;
   coins: number;
   stats: UserStats;
-  dailyWorkouts: DailyWorkout[];
+  dailyWorkouts: WorkoutProgress[];
 }
 
-// Default daily workouts
-const DEFAULT_DAILY_WORKOUTS: DailyWorkout[] = [
-  {
-    id: 'pushups',
-    name: 'Push-ups',
-    icon: 'human',
-    currentValue: 0,
-    targetValue: 30,
-    unit: 'reps',
-    completed: false,
-    lastUpdated: 0,
-  },
-  {
-    id: 'cycling',
-    name: 'Cycling',
-    icon: 'bike',
-    currentValue: 0,
-    targetValue: 5,
-    unit: 'km',
-    completed: false,
-    lastUpdated: 0,
-  },
-  {
-    id: 'running',
-    name: 'Running',
-    icon: 'run',
-    currentValue: 0,
-    targetValue: 10,
-    unit: 'km',
-    completed: false,
-    lastUpdated: 0,
-  },
-];
+// Add XP calculation constants
+const XP_RATES = {
+  // Cardiovascular
+  running: { unit: 'km', xpPerUnit: 2 },
+  cycling: { unit: 'km', xpPerUnit: 2 },
+  swimming: { unit: 'km', xpPerUnit: 2 },
+  walking: { unit: 'km', xpPerUnit: 2 },
+
+  // Strength Training
+  pushups: { unit: 'reps', xpPerUnit: 0.1 }, // 1 XP per 10 reps
+  pullups: { unit: 'reps', xpPerUnit: 0.1 },
+  squats: { unit: 'reps', xpPerUnit: 0.1 },
+  planks: { unit: 'minutes', xpPerUnit: 0.25 }, // 0.5 XP per 2 minutes
+
+  // Flexibility & Mobility
+  'static-stretching': { unit: 'minutes', xpPerUnit: 0.1 }, // 0.5 XP per 5 minutes
+  'dynamic-stretching': { unit: 'minutes', xpPerUnit: 0.1 },
+  yoga: { unit: 'session', xpPerUnit: 0.2 }, // 1 XP per 5 minute session
+  pilates: { unit: 'session', xpPerUnit: 0.2 },
+  'pnf-stretching': { unit: 'minutes', xpPerUnit: 0.1 },
+
+  // Balance & Stability
+  'tai-chi': { unit: 'session', xpPerUnit: 0.2 },
+  'yoga-balance': { unit: 'session', xpPerUnit: 0.2 },
+  'single-leg-stand': { unit: 'minutes', xpPerUnit: 0.1 },
+  'heel-toe-walking': { unit: 'minutes', xpPerUnit: 0.1 },
+  'balance-board': { unit: 'minutes', xpPerUnit: 0.1 },
+
+  // HIIT
+  'sprint-intervals': { unit: '100m', xpPerUnit: 2 },
+  'circuit-training': { unit: 'minutes', xpPerUnit: 2 },
+  tabata: { unit: 'minutes', xpPerUnit: 2 },
+  burpees: { unit: 'reps', xpPerUnit: 1 },
+  'box-jumps': { unit: 'reps', xpPerUnit: 1 },
+
+  // Functional Training
+  lunges: { unit: 'reps', xpPerUnit: 0.1 },
+  'step-ups': { unit: 'reps', xpPerUnit: 0.1 },
+  'medicine-ball-throws': { unit: 'reps', xpPerUnit: 0.1 },
+  'kettlebell-swings': { unit: 'reps', xpPerUnit: 0.1 },
+
+};
 
 export default function DashboardScreen() {
   const { currentTheme } = useTheme();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editingWorkout, setEditingWorkout] = useState<DailyWorkout | null>(null);
+  const [editingWorkout, setEditingWorkout] = useState<WorkoutProgress | null>(null);
   const [progressValue, setProgressValue] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
@@ -92,23 +92,59 @@ export default function DashboardScreen() {
 
       const userData = userDoc.data();
 
-      // Load or initialize daily workouts
+      // Load workouts from daily_workouts collection
       const today = new Date().toISOString().split('T')[0];
-      const dailyProgressRef = doc(db, 'daily_workout_progress', `${auth.currentUser.uid}_${today}`);
-      const dailyProgressDoc = await getDoc(dailyProgressRef);
+      const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
+      const userWorkoutsDoc = await getDoc(userWorkoutsRef);
       
-      let dailyWorkouts: DailyWorkout[];
+      let dailyWorkouts: WorkoutProgress[] = [];
       
-      if (dailyProgressDoc.exists()) {
-        dailyWorkouts = dailyProgressDoc.data().workouts;
-      } else {
-        // Initialize with default workouts
-        dailyWorkouts = DEFAULT_DAILY_WORKOUTS;
-        await setDoc(dailyProgressRef, { 
-          userId: auth.currentUser.uid,
-          date: today,
-          workouts: dailyWorkouts 
+      if (userWorkoutsDoc.exists()) {
+        const data = userWorkoutsDoc.data();
+        const allWorkouts = data.workouts || [];
+        
+        // Get today's workouts
+        const todaysWorkouts = allWorkouts.filter((w: any) => w.date === today);
+        
+        // Group workouts by name and process each group
+        const workoutGroups = new Map<string, any[]>();
+        todaysWorkouts.forEach((workout: any) => {
+          const workouts = workoutGroups.get(workout.name) || [];
+          workouts.push(workout);
+          workoutGroups.set(workout.name, workouts);
         });
+        
+        // Process each group to create WorkoutProgress objects
+        workoutGroups.forEach((workouts, name) => {
+          // Sort by timestamp to get the latest entry
+          workouts.sort((a: any, b: any) => b.timestamp - a.timestamp);
+          const latestWorkout = workouts[0];
+          
+          // Find the first workout of the day (for target value)
+          const firstWorkout = workouts[workouts.length - 1];
+          
+          // Create WorkoutProgress object
+          const workoutProgress: WorkoutProgress = {
+            workoutId: name,
+            name: name,
+            icon: latestWorkout.icon,
+            metric: latestWorkout.metric,
+            unit: latestWorkout.unit,
+            targetValue: firstWorkout.value,
+            currentValue: latestWorkout.value,
+            completed: latestWorkout.completed || false,
+            date: today,
+            timestamp: latestWorkout.timestamp,
+          };
+          
+          dailyWorkouts.push(workoutProgress);
+        });
+        
+        // Sort by timestamp
+        dailyWorkouts.sort((a, b) => b.timestamp - a.timestamp);
+      } else {
+        // Create the document if it doesn't exist
+        await setDoc(userWorkoutsRef, { workouts: [] });
       }
 
       setStats({
@@ -120,6 +156,11 @@ export default function DashboardScreen() {
         },
         dailyWorkouts,
       });
+
+      // Check if all workouts are completed
+      if (dailyWorkouts.length > 0) {
+        checkAllWorkoutsCompleted(dailyWorkouts);
+      }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -162,52 +203,50 @@ export default function DashboardScreen() {
     return Animated.stagger(50, animations);
   };
 
-  const checkAllWorkoutsCompleted = (workouts: DailyWorkout[]) => {
-    const allCompleted = workouts.every(w => w.completed);
-    if (allCompleted && !showCelebration) {
+  const checkAllWorkoutsCompleted = (workouts: WorkoutProgress[]) => {
+    const today = new Date().toISOString().split('T')[0];
+    const allCompleted = workouts.every(workout =>
+      workouts.some(w => w.workoutId === workout.workoutId && w.date === today)
+    );
+
+    if (allCompleted) {
       setShowCelebration(true);
-      
-      // Reset animations
-      confettiAnimations.forEach((confetti) => {
-        confetti.position.setValue({ x: 0, y: 0 });
-        confetti.opacity.setValue(1);
-        confetti.scale.setValue(1);
-        confetti.rotation.setValue(0);
+      setTimeout(() => setShowCelebration(false), 3000);
+    }
+  };
+
+  const calculateWorkoutXP = (workout: WorkoutProgress): number => {
+    const xpRate = XP_RATES[workout.workoutId as keyof typeof XP_RATES];
+    if (!xpRate) return 0;
+
+    let xp = 0;
+    if (workout.unit === xpRate.unit) {
+      xp = workout.currentValue * xpRate.xpPerUnit;
+    }
+    return Math.floor(xp); // Round down to nearest integer
+  };
+
+  const updateUserXP = async (newXP: number) => {
+    if (!auth.currentUser || !stats) return;
+
+    try {
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      const currentTotalXP = stats.stats.totalXP + newXP;
+      const levelData = calculateLevel(currentTotalXP);
+
+      await updateDoc(userRef, {
+        totalXP: currentTotalXP,
       });
 
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(celebrationOpacity, {
-            toValue: 1,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-          Animated.delay(1500),
-          Animated.timing(celebrationOpacity, {
-            toValue: 0,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.spring(celebrationScale, {
-            toValue: 1,
-            friction: 8,
-            tension: 40,
-            useNativeDriver: true,
-          }),
-          Animated.delay(1500),
-          Animated.timing(celebrationScale, {
-            toValue: 0.3,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-        ]),
-        animateConfetti(),
-      ]).start(() => {
-        setShowCelebration(false);
-        celebrationScale.setValue(0.3);
-      });
+      setStats(prev => prev ? {
+        ...prev,
+        stats: {
+          totalXP: currentTotalXP,
+          ...levelData,
+        },
+      } : null);
+    } catch (error) {
+      console.error('Error updating user XP:', error);
     }
   };
 
@@ -218,29 +257,34 @@ export default function DashboardScreen() {
       const value = parseFloat(progressValue);
       if (isNaN(value)) return;
 
-      const cappedValue = Math.min(value, editingWorkout.targetValue);
       const today = new Date().toISOString().split('T')[0];
-      const dailyProgressRef = doc(db, 'daily_workout_progress', `${auth.currentUser.uid}_${today}`);
-
-      const updatedWorkouts = stats.dailyWorkouts.map(w =>
-        w.id === editingWorkout.id
-          ? {
-              ...w,
-              currentValue: cappedValue,
-              completed: cappedValue >= w.targetValue,
-              lastUpdated: Date.now(),
-            }
-          : w
-      );
-
-      await updateDoc(dailyProgressRef, { workouts: updatedWorkouts });
-
-      setStats(prev => prev ? {
-        ...prev,
-        dailyWorkouts: updatedWorkouts,
-      } : null);
-
-      checkAllWorkoutsCompleted(updatedWorkouts);
+      const timestamp = Date.now();
+      
+      const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
+      const userWorkoutsDoc = await getDoc(userWorkoutsRef);
+      
+      if (userWorkoutsDoc.exists()) {
+        const data = userWorkoutsDoc.data();
+        const allWorkouts = data.workouts || [];
+        
+        // Convert to Exercise format for storage
+        const newWorkout = {
+          name: editingWorkout.name,
+          icon: editingWorkout.icon,
+          metric: editingWorkout.metric,
+          unit: editingWorkout.unit,
+          value: value,
+          timestamp,
+          date: today,
+        };
+        
+        await updateDoc(userWorkoutsRef, {
+          workouts: [...allWorkouts, newWorkout]
+        });
+        
+        // Reload dashboard data to ensure consistency
+        await loadDashboardData();
+      }
 
       setShowEditModal(false);
       setProgressValue('');
@@ -250,63 +294,95 @@ export default function DashboardScreen() {
     }
   };
 
-  const handleCompleteWorkout = async (workout: DailyWorkout) => {
+  const handleCompleteWorkout = async (workout: WorkoutProgress) => {
     if (!auth.currentUser || !stats) return;
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const dailyProgressRef = doc(db, 'daily_workout_progress', `${auth.currentUser.uid}_${today}`);
+      const timestamp = Date.now();
+      
+      const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
+      const userWorkoutsDoc = await getDoc(userWorkoutsRef);
+      
+      if (userWorkoutsDoc.exists()) {
+        const data = userWorkoutsDoc.data();
+        const allWorkouts = data.workouts || [];
+        
+        // Convert to Exercise format for storage
+        const newWorkout = {
+          name: workout.name,
+          icon: workout.icon,
+          metric: workout.metric,
+          unit: workout.unit,
+          value: workout.targetValue,
+          completed: true, // Mark as completed
+          timestamp,
+          date: today,
+        };
+        
+        await updateDoc(userWorkoutsRef, {
+          workouts: [...allWorkouts, newWorkout]
+        });
 
-      const updatedWorkouts = stats.dailyWorkouts.map(w =>
-        w.id === workout.id
-          ? {
-              ...w,
-              currentValue: workout.targetValue,
-              completed: true,
-              lastUpdated: Date.now(),
-            }
-          : w
-      );
+        // Calculate and update XP
+        const xpGained = calculateWorkoutXP({
+          ...workout,
+          currentValue: workout.targetValue,
+          completed: true
+        });
 
-      await updateDoc(dailyProgressRef, { workouts: updatedWorkouts });
-
-      setStats(prev => prev ? {
-        ...prev,
-        dailyWorkouts: updatedWorkouts,
-      } : null);
-
-      checkAllWorkoutsCompleted(updatedWorkouts);
+        if (xpGained > 0) {
+          await updateUserXP(xpGained);
+        }
+        
+        // Reload dashboard data
+        await loadDashboardData();
+      }
     } catch (error) {
       console.error('Error completing workout:', error);
     }
   };
 
-  const handleResetProgress = async (workout: DailyWorkout) => {
+  const handleResetWorkout = async (workout: WorkoutProgress) => {
     if (!auth.currentUser || !stats) return;
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const dailyProgressRef = doc(db, 'daily_workout_progress', `${auth.currentUser.uid}_${today}`);
-
-      const updatedWorkouts = stats.dailyWorkouts.map(w =>
-        w.id === workout.id
-          ? {
-              ...w,
-              currentValue: 0,
-              completed: false,
-              lastUpdated: Date.now(),
-            }
-          : w
-      );
-
-      await updateDoc(dailyProgressRef, { workouts: updatedWorkouts });
-
-      setStats(prev => prev ? {
-        ...prev,
-        dailyWorkouts: updatedWorkouts,
-      } : null);
+      const timestamp = Date.now();
+      
+      const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
+      const userWorkoutsDoc = await getDoc(userWorkoutsRef);
+      
+      if (userWorkoutsDoc.exists()) {
+        const data = userWorkoutsDoc.data();
+        const allWorkouts = data.workouts || [];
+        
+        // Keep all workouts that are not from today or have a different name
+        const filteredWorkouts = allWorkouts.filter(
+          (w: any) => !(w.name === workout.name && w.date === today)
+        );
+        
+        // Add a new reset workout entry
+        const resetWorkout = {
+          name: workout.name,
+          icon: workout.icon,
+          metric: workout.metric,
+          unit: workout.unit,
+          value: 0,
+          completed: false,
+          timestamp,
+          date: today,
+        };
+        
+        await updateDoc(userWorkoutsRef, { 
+          workouts: [...filteredWorkouts, resetWorkout] 
+        });
+        
+        // Reload dashboard data
+        await loadDashboardData();
+      }
     } catch (error) {
-      console.error('Error resetting progress:', error);
+      console.error('Error resetting workout:', error);
     }
   };
 
@@ -315,26 +391,154 @@ export default function DashboardScreen() {
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const dailyProgressRef = doc(db, 'daily_workout_progress', `${auth.currentUser.uid}_${today}`);
-
-      const updatedWorkouts = stats.dailyWorkouts.map(w => ({
-        ...w,
-        currentValue: w.targetValue,
-        completed: true,
-        lastUpdated: Date.now(),
-      }));
-
-      await updateDoc(dailyProgressRef, { workouts: updatedWorkouts });
-
-      setStats(prev => prev ? {
-        ...prev,
-        dailyWorkouts: updatedWorkouts,
-      } : null);
-
-      checkAllWorkoutsCompleted(updatedWorkouts);
+      const timestamp = Date.now();
+      
+      const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
+      const userWorkoutsDoc = await getDoc(userWorkoutsRef);
+      
+      if (userWorkoutsDoc.exists()) {
+        const data = userWorkoutsDoc.data();
+        const allWorkouts = data.workouts || [];
+        
+        // Convert all workouts to Exercise format for storage
+        const newWorkouts = stats.dailyWorkouts.map(workout => ({
+          name: workout.name,
+          icon: workout.icon,
+          metric: workout.metric,
+          unit: workout.unit,
+          value: workout.targetValue,
+          timestamp,
+          date: today,
+        }));
+        
+        await updateDoc(userWorkoutsRef, {
+          workouts: [...allWorkouts, ...newWorkouts]
+        });
+        
+        // Reload dashboard data
+        await loadDashboardData();
+      }
     } catch (error) {
       console.error('Error completing all workouts:', error);
     }
+  };
+
+  const isWorkoutCompleted = (workout: WorkoutProgress, dailyWorkouts: WorkoutProgress[]) => {
+    const today = new Date().toISOString().split('T')[0];
+    return dailyWorkouts.some(w => w.workoutId === workout.workoutId && w.date === today);
+  };
+
+  const getWorkoutIcon = (workoutId: string): string => {
+    // Use the icon directly from the workout data
+    const workout = stats?.dailyWorkouts.find(w => w.workoutId === workoutId);
+    return workout?.icon || 'dumbbell';
+  };
+
+  const renderWorkoutItem = (workout: WorkoutProgress) => {
+    return (
+      <TouchableOpacity
+        key={`${workout.workoutId}-${workout.timestamp}`}
+        style={[styles.workoutItem, {
+          backgroundColor: `${currentTheme.colors.accent}15`,
+          borderColor: currentTheme.colors.accent,
+        }]}
+        onPress={() => {
+          setEditingWorkout(workout);
+          setProgressValue(workout.currentValue.toString());
+          setShowEditModal(true);
+        }}
+      >
+        <View style={styles.workoutItemLeft}>
+          <View style={[styles.workoutIcon, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
+            <MaterialCommunityIcons
+              name={workout.icon as any}
+              size={24}
+              color={currentTheme.colors.accent}
+            />
+          </View>
+          <View style={styles.workoutInfo}>
+            <ThemedText style={[styles.workoutName, { color: currentTheme.colors.accent }]}>
+              {workout.name}
+            </ThemedText>
+            <ThemedText style={[styles.workoutTime, { color: `${currentTheme.colors.accent}99` }]}>
+              {new Date(workout.timestamp).toLocaleTimeString()}
+            </ThemedText>
+            <View style={[styles.progressBarContainer, { marginTop: 8 }]}>
+              <View 
+                style={[
+                  styles.progressBar, 
+                  { 
+                    width: `${(workout.currentValue / workout.targetValue) * 100}%`,
+                    backgroundColor: currentTheme.colors.accent 
+                  }
+                ]} 
+              />
+            </View>
+          </View>
+        </View>
+        <View style={styles.workoutRight}>
+          <ThemedText style={[styles.workoutValue, { color: currentTheme.colors.accent }]}>
+            {workout.currentValue}/{workout.targetValue} {workout.unit}
+          </ThemedText>
+          <View style={styles.workoutActions}>
+            {!workout.completed && (
+              <TouchableOpacity
+                onPress={() => handleCompleteWorkout(workout)}
+                style={[styles.actionButton, { backgroundColor: currentTheme.colors.accent }]}
+              >
+                <MaterialCommunityIcons name="check" size={20} color="#fff" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => handleResetWorkout(workout)}
+              style={[styles.actionButton, { borderColor: currentTheme.colors.accent, borderWidth: 1 }]}
+            >
+              <MaterialCommunityIcons name="refresh" size={20} color={currentTheme.colors.accent} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderCelebration = () => {
+    if (!showCelebration) return null;
+
+    return (
+      <View style={styles.celebrationContainer}>
+        <Text style={styles.celebrationText}>Completed!</Text>
+      </View>
+    );
+  };
+
+  const renderDailyWorkouts = () => {
+    if (!stats || !stats.dailyWorkouts.length) {
+      return (
+        <View style={styles.emptyState}>
+          <ThemedText style={styles.emptyStateText}>No workouts planned for today</ThemedText>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.workoutsList}>
+        {stats.dailyWorkouts.map((workout) => renderWorkoutItem(workout))}
+        
+        {/* Complete All Button */}
+        <TouchableOpacity
+          style={[
+            styles.completeAllButton,
+            { backgroundColor: currentTheme.colors.accent }
+          ]}
+          onPress={handleCompleteAllWorkouts}
+        >
+          <MaterialCommunityIcons name="check-all" size={24} color="#fff" />
+          <ThemedText style={[styles.completeAllButtonText, { color: '#fff' }]}>
+            Complete All
+          </ThemedText>
+        </TouchableOpacity>
+      </View>
+    );
   };
 
   if (loading || !stats) {
@@ -355,57 +559,7 @@ export default function DashboardScreen() {
       />
       <ThemedView style={styles.container}>
         {/* Celebration Animation */}
-        {showCelebration && (
-          <View style={styles.celebrationOverlay}>
-            {confettiAnimations.map((confetti, index) => (
-              <Animated.View
-                key={index}
-                style={[
-                  styles.confetti,
-                  {
-                    transform: [
-                      { translateX: confetti.position.x },
-                      { translateY: confetti.position.y },
-                      { scale: confetti.scale },
-                      {
-                        rotate: confetti.rotation.interpolate({
-                          inputRange: [0, 360],
-                          outputRange: ['0deg', '360deg'],
-                        }),
-                      },
-                    ],
-                    opacity: confetti.opacity,
-                    backgroundColor: [
-                      '#4CAF50', // Green
-                      '#66BB6A', // Light Green
-                      '#81C784', // Lighter Green
-                      '#A5D6A7', // Very Light Green
-                      '#2E7D32', // Dark Green
-                    ][index % 5],
-                  },
-                ]}
-              />
-            ))}
-            <Animated.View
-              style={[
-                styles.celebrationContainer,
-                {
-                  opacity: celebrationOpacity,
-                  transform: [{ scale: celebrationScale }],
-                },
-              ]}
-            >
-              <MaterialCommunityIcons 
-                name="party-popper" 
-                size={64}
-                color="#4CAF50"
-              />
-              <ThemedText style={styles.celebrationText}>
-                Completed!
-              </ThemedText>
-            </Animated.View>
-          </View>
-        )}
+        {renderCelebration()}
 
         {/* Header */}
         <View style={styles.header}>
@@ -430,9 +584,14 @@ export default function DashboardScreen() {
           <View style={[styles.section, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
             <View style={styles.sectionHeader}>
               <MaterialCommunityIcons name="star" size={24} color={currentTheme.colors.accent} />
-              <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
-                Level {stats.stats.level}
-              </ThemedText>
+              <View style={styles.levelInfo}>
+                <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
+                  Level {stats.stats.level}
+                </ThemedText>
+                <ThemedText style={[styles.totalXP, { color: currentTheme.colors.accent }]}>
+                  Total XP: {stats.stats.totalXP}
+                </ThemedText>
+              </View>
             </View>
             <View style={styles.progressBarContainer}>
               <View 
@@ -445,9 +604,14 @@ export default function DashboardScreen() {
                 ]} 
               />
             </View>
-            <ThemedText style={[styles.xpText, { color: currentTheme.colors.accent }]}>
-              {stats.stats.currentLevelXP} / {stats.stats.xpForNextLevel} XP
-            </ThemedText>
+            <View style={styles.xpInfoContainer}>
+              <ThemedText style={[styles.xpText, { color: currentTheme.colors.accent }]}>
+                {stats.stats.currentLevelXP} / {stats.stats.xpForNextLevel} XP
+              </ThemedText>
+              <ThemedText style={[styles.xpNeeded, { color: currentTheme.colors.accent }]}>
+                {stats.stats.xpForNextLevel - stats.stats.currentLevelXP} XP needed for Level {stats.stats.level + 1}
+              </ThemedText>
+            </View>
           </View>
 
           {/* Daily Workouts */}
@@ -462,163 +626,50 @@ export default function DashboardScreen() {
               style={styles.workoutsScrollView} 
               showsVerticalScrollIndicator={false}
             >
-              <View style={styles.workoutsList}>
-                {stats.dailyWorkouts.map((workout) => (
-                  <TouchableOpacity 
-                    key={workout.id}
-                    style={[
-                      styles.workoutItem,
-                      { 
-                        backgroundColor: workout.completed 
-                          ? `${currentTheme.colors.accent}30`
-                          : `${currentTheme.colors.accent}10`,
-                        borderRadius: 12,
-                      }
-                    ]}
-                    onPress={() => {
-                      setEditingWorkout(workout);
-                      setProgressValue(workout.currentValue.toString());
-                      setShowEditModal(true);
-                    }}
-                  >
-                    <View style={styles.workoutHeader}>
-                      <View style={styles.workoutInfo}>
-                        <MaterialCommunityIcons 
-                          name={workout.icon as any}
-                          size={24}
-                          color={currentTheme.colors.accent}
-                        />
-                        <ThemedText style={[styles.workoutName, { color: currentTheme.colors.text }]}>
-                          {workout.name}
-                        </ThemedText>
-                      </View>
-                      <View style={styles.workoutProgress}>
-                        <ThemedText style={[styles.workoutValue, { color: currentTheme.colors.text }]}>
-                          {workout.currentValue}/{workout.targetValue} {workout.unit}
-                        </ThemedText>
-                        <View style={styles.workoutActions}>
-                          {!workout.completed && (
-                            <TouchableOpacity
-                              style={[styles.completeButton, { backgroundColor: currentTheme.colors.accent }]}
-                              onPress={() => handleCompleteWorkout(workout)}
-                            >
-                              <MaterialCommunityIcons 
-                                name="check"
-                                size={16}
-                                color="#fff"
-                              />
-                            </TouchableOpacity>
-                          )}
-                          <TouchableOpacity
-                            style={styles.resetButton}
-                            onPress={() => handleResetProgress(workout)}
-                          >
-                            <MaterialCommunityIcons 
-                              name="refresh"
-                              size={20}
-                              color={currentTheme.colors.accent}
-                            />
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    </View>
-                    <View style={styles.progressBarContainer}>
-                      <View 
-                        style={[
-                          styles.progressBar, 
-                          { 
-                            width: `${(workout.currentValue / workout.targetValue) * 100}%`,
-                            backgroundColor: currentTheme.colors.accent 
-                          }
-                        ]} 
-                      />
-                    </View>
-                  </TouchableOpacity>
-                ))}
-                
-                {/* Complete All Button */}
-                <TouchableOpacity
-                  style={[
-                    styles.completeAllButton,
-                    { 
-                      backgroundColor: currentTheme.colors.accent,
-                      opacity: stats.dailyWorkouts.every(w => w.completed) ? 0.5 : 1,
-                      marginTop: 12,
-                      marginBottom: 8,
-                    }
-                  ]}
-                  onPress={handleCompleteAllWorkouts}
-                  disabled={stats.dailyWorkouts.every(w => w.completed)}
-                >
-                  <MaterialCommunityIcons 
-                    name="check-all"
-                    size={24}
-                    color="#fff"
-                  />
-                  <ThemedText style={styles.completeAllText}>
-                    Complete All Workouts
-                  </ThemedText>
-                </TouchableOpacity>
-              </View>
+              {renderDailyWorkouts()}
             </ScrollView>
           </View>
         </ScrollView>
 
         {/* Edit Progress Modal */}
         <Modal
+          animationType="slide"
+          transparent={true}
           visible={showEditModal}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowEditModal(false)}
+          onRequestClose={() => {
+            setShowEditModal(false);
+            setProgressValue('');
+            setEditingWorkout(null);
+          }}
         >
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: currentTheme.colors.background }]}>
-              <View style={styles.modalHeader}>
-                <ThemedText style={styles.modalTitle}>
-                  Update Progress
-                </ThemedText>
-                <TouchableOpacity onPress={() => setShowEditModal(false)}>
-                  <MaterialCommunityIcons 
-                    name="close"
-                    size={24}
-                    color={currentTheme.colors.text}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.inputContainer}>
-                <ThemedText style={styles.inputLabel}>
-                  Enter your progress for {editingWorkout?.name}
-                </ThemedText>
-                <View style={styles.inputWrapper}>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      {
-                        color: currentTheme.colors.text,
-                        borderColor: currentTheme.colors.border,
-                      }
-                    ]}
-                    value={progressValue}
-                    onChangeText={setProgressValue}
-                    keyboardType="numeric"
-                    placeholder="Enter value"
-                    placeholderTextColor={`${currentTheme.colors.text}50`}
-                  />
-                  <ThemedText style={styles.unitText}>
-                    {editingWorkout?.unit}
-                  </ThemedText>
-                </View>
-              </View>
-
-              <View style={styles.modalActions}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>
+                Update {editingWorkout?.name} Progress
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={progressValue}
+                onChangeText={setProgressValue}
+                keyboardType="numeric"
+                placeholder={`Enter value in ${editingWorkout?.unit}`}
+              />
+              <View style={styles.modalButtons}>
                 <TouchableOpacity
-                  style={[styles.modalButton, { backgroundColor: currentTheme.colors.accent }]}
+                  style={[styles.button, styles.cancelButton]}
+                  onPress={() => {
+                    setShowEditModal(false);
+                    setProgressValue('');
+                    setEditingWorkout(null);
+                  }}
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.button, styles.saveButton]}
                   onPress={handleUpdateProgress}
                 >
-                  <ThemedText style={styles.modalButtonText}>
-                    Save
-                  </ThemedText>
+                  <Text style={styles.buttonText}>Save</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -683,72 +734,77 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   workoutsScrollView: {
-    height: 380,
+    maxHeight: 380,
   },
   workoutsList: {
     gap: 12,
     paddingBottom: 8,
   },
   workoutItem: {
-    padding: 16,
-    gap: 12,
-    minHeight: 96,
-  },
-  workoutHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+  },
+  workoutItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    flex: 1,
   },
   workoutInfo: {
-    flexDirection: 'row',
+    flex: 1,
+  },
+  workoutIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
   },
   workoutName: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
+    marginBottom: 4,
   },
-  workoutProgress: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  workoutTime: {
+    fontSize: 12,
+    opacity: 0.7,
+  },
+  workoutRight: {
+    alignItems: 'flex-end',
+    gap: 8,
   },
   workoutValue: {
     fontSize: 14,
-    opacity: 0.8,
+    fontWeight: '600',
   },
   workoutActions: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
   },
-  completeButton: {
+  actionButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  resetButton: {
-    padding: 4,
-  },
   progressBarContainer: {
     height: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 2,
     overflow: 'hidden',
+    marginTop: 8,
   },
   progressBar: {
     height: '100%',
     borderRadius: 2,
   },
-  xpText: {
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  modalOverlay: {
+  modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
@@ -760,27 +816,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-  },
-  inputContainer: {
     marginBottom: 20,
-  },
-  inputLabel: {
-    fontSize: 16,
-    marginBottom: 8,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
   input: {
     flex: 1,
@@ -790,39 +829,34 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
   },
-  unitText: {
-    fontSize: 16,
-    fontWeight: '500',
-    width: 60,
-  },
-  modalActions: {
+  modalButtons: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
   },
-  modalButton: {
+  button: {
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
     minWidth: 80,
     alignItems: 'center',
   },
-  modalButtonText: {
+  cancelButton: {
+    backgroundColor: '#E53E3E',
+  },
+  saveButton: {
+    backgroundColor: '#48BB78',
+  },
+  buttonText: {
     color: '#fff',
     fontWeight: '500',
-  },
-  celebrationOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
   },
   celebrationContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     position: 'absolute',
-    top: '15%',
+    top: '25%',
     flexDirection: 'column',
-    gap: 24,
+    gap: 48,
   },
   celebrationText: {
     fontSize: 48,
@@ -833,7 +867,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
     textAlign: 'center',
     includeFontPadding: false,
-    marginTop: 0,
+    marginTop: 24,
     position: 'relative',
     zIndex: 1001,
   },
@@ -850,10 +884,41 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     gap: 8,
+    marginTop: 12,
   },
-  completeAllText: {
-    color: '#fff',
+  completeAllButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  levelInfo: {
+    flex: 1,
+  },
+  totalXP: {
+    fontSize: 14,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  xpInfoContainer: {
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    opacity: 0.7,
+  },
+  xpText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  xpNeeded: {
+    fontSize: 14,
+    opacity: 0.8,
+    marginTop: 4,
   },
 });

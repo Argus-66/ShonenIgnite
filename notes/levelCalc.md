@@ -1,0 +1,11 @@
+Level 1: 0 XP (Starting level)
+Level 2: 100 XP required (Total: 100 XP)
+Level 3: 150 XP required (Total: 250 XP)
+Level 4: 225 XP required (Total: 475 XP)
+Level 5: 338 XP required (Total: 813 XP)
+Level 6: 507 XP required (Total: 1320 XP)
+Level 7: 760 XP required (Total: 2080 XP)
+Level 8: 1140 XP required (Total: 3220 XP)
+Level 9: 1710 XP required (Total: 4930 XP)
+Level 10: 2565 XP required (Total: 7495 XP)
+Note: XP needed to reach the next level is calculated using an exponential factor of 1.5 (i.e. XP for next level = previous XP × 1.5, rounded as needed).

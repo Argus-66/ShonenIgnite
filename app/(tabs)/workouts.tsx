@@ -34,44 +34,44 @@ const workoutCategories = {
     title: 'Flexibility & Mobility',
     icon: 'yoga',
     exercises: [
-      { name: 'Static Stretching', metric: 'Time', icon: 'human' },
-      { name: 'Dynamic Stretching', metric: 'Time', icon: 'run' },
-      { name: 'Yoga', metric: 'Time/Session', icon: 'yoga' },
-      { name: 'Pilates', metric: 'Time/Session', icon: 'human' },
-      { name: 'PNF Stretching', metric: 'Time', icon: 'human' },
+      { name: 'Static Stretching', metric: 'Time', icon: 'human', unit: 'minutes' },
+      { name: 'Dynamic Stretching', metric: 'Time', icon: 'run', unit: 'minutes' },
+      { name: 'Yoga', metric: 'Time/Session', icon: 'yoga', unit: 'minutes' },
+      { name: 'Pilates', metric: 'Time/Session', icon: 'human', unit: 'minutes' },
+      { name: 'PNF Stretching', metric: 'Time', icon: 'human', unit: 'minutes' },
     ],
   },
   balance: {
     title: 'Balance & Stability',
     icon: 'human-balance',
     exercises: [
-      { name: 'Tai Chi', metric: 'Time/Session', icon: 'human' },
-      { name: 'Yoga Balance Poses', metric: 'Time/Session', icon: 'yoga' },
-      { name: 'Single-Leg Stand', metric: 'Time', icon: 'human' },
-      { name: 'Heel-to-Toe Walking', metric: 'Distance/Time', icon: 'walk' },
-      { name: 'Balance Board', metric: 'Time', icon: 'human-balance' },
+      { name: 'Tai Chi', metric: 'Time/Session', icon: 'human', unit: 'minutes' },
+      { name: 'Yoga Balance Poses', metric: 'Time/Session', icon: 'yoga', unit: 'minutes' },
+      { name: 'Single-Leg Stand', metric: 'Time', icon: 'human', unit: 'minutes' },
+      { name: 'Heel-to-Toe Walking', metric: 'Distance/Time', icon: 'walk', unit: 'minutes' },
+      { name: 'Balance Board', metric: 'Time', icon: 'human-balance', unit: 'minutes' },
     ],
   },
   hiit: {
     title: 'HIIT',
     icon: 'lightning-bolt',
     exercises: [
-      { name: 'Sprint Intervals', metric: 'Distance', icon: 'run-fast' },
-      { name: 'Circuit Training', metric: 'Time', icon: 'sync' },
-      { name: 'Tabata', metric: 'Time', icon: 'timer' },
-      { name: 'Burpees', metric: 'Reps/Time', icon: 'human' },
-      { name: 'Box Jumps', metric: 'Reps', icon: 'arrow-up-box' },
+      { name: 'Sprint Intervals', metric: 'Distance', icon: 'run-fast', unit: 'km' },
+      { name: 'Circuit Training', metric: 'Time', icon: 'sync', unit: 'minutes' },
+      { name: 'Tabata', metric: 'Time', icon: 'timer', unit: 'minutes' },
+      { name: 'Burpees', metric: 'Reps/Time', icon: 'human', unit: 'reps' },
+      { name: 'Box Jumps', metric: 'Reps', icon: 'arrow-up-box', unit: 'reps' },
     ],
   },
   functional: {
     title: 'Functional Training',
     icon: 'dumbbell',
     exercises: [
-      { name: 'Squats', metric: 'Reps', icon: 'human' },
-      { name: 'Lunges', metric: 'Reps', icon: 'human' },
-      { name: 'Step-Ups', metric: 'Reps', icon: 'stairs-up' },
-      { name: 'Medicine Ball Throws', metric: 'Reps', icon: 'basketball' },
-      { name: 'Kettlebell Swings', metric: 'Reps', icon: 'weight' },
+      { name: 'Squats', metric: 'Reps', icon: 'human', unit: 'reps' },
+      { name: 'Lunges', metric: 'Reps', icon: 'human', unit: 'reps' },
+      { name: 'Step-Ups', metric: 'Reps', icon: 'stairs-up', unit: 'reps' },
+      { name: 'Medicine Ball Throws', metric: 'Reps', icon: 'basketball', unit: 'reps' },
+      { name: 'Kettlebell Swings', metric: 'Reps', icon: 'weight', unit: 'reps' },
     ],
   },
 };
@@ -80,10 +80,17 @@ interface Exercise {
   name: string;
   metric: string;
   icon: string;
-  value: number;
   unit: string;
+  value: number;
   timestamp: number;
   date: string;
+}
+
+interface ExerciseTemplate {
+  name: string;
+  metric: string;
+  icon: string;
+  unit: string;
 }
 
 export default function WorkoutsScreen() {
@@ -112,7 +119,7 @@ export default function WorkoutsScreen() {
         const allWorkouts = data.workouts || [];
         const todaysWorkouts = allWorkouts
           .filter((w: Exercise) => w.date === today)
-          .sort((a: Exercise, b: Exercise) => b.timestamp - a.timestamp);
+          .sort((a: Exercise, b: Exercise) => (b.timestamp || 0) - (a.timestamp || 0));
         
         setTodayWorkouts(todaysWorkouts);
       } else {
@@ -155,8 +162,15 @@ export default function WorkoutsScreen() {
     setSelectedCategory(category);
   };
 
-  const handleExerciseSelect = (exercise: Exercise) => {
-    setSelectedExercise(exercise);
+  const handleExerciseSelect = (exercise: ExerciseTemplate) => {
+    // Add default values for the required properties
+    const exerciseWithDefaults: Exercise = {
+      ...exercise,
+      value: 0,
+      timestamp: Date.now(),
+      date: new Date().toISOString().split('T')[0]
+    };
+    setSelectedExercise(exerciseWithDefaults);
     setShowWorkoutModal(false);
     setShowExerciseModal(true);
   };
@@ -186,15 +200,14 @@ export default function WorkoutsScreen() {
         const data = userWorkoutsDoc.data();
         const workouts = data.workouts || [];
         
-        // Check for similar workouts in the last minute
-        const lastMinute = Date.now() - 60000; // 1 minute ago
-        const hasSimilarWorkout = workouts.some((w: Exercise) => 
+        // Check for duplicate workouts more thoroughly
+        const todaysWorkouts = workouts.filter((w: Exercise) => w.date === today);
+        const hasDuplicate = todaysWorkouts.some((w: Exercise) => 
           w.name === newWorkout.name && 
-          w.value === newWorkout.value && 
-          w.timestamp > lastMinute
+          w.value === newWorkout.value
         );
 
-        if (hasSimilarWorkout) {
+        if (hasDuplicate) {
           // Don't add duplicate workout
           setShowExerciseModal(false);
           setExerciseValue('');
@@ -273,7 +286,11 @@ export default function WorkoutsScreen() {
               <ThemedText style={styles.sectionTitle}>Daily Workout</ThemedText>
             </View>
             
-            <View style={styles.workoutsList}>
+            <ScrollView 
+              style={styles.workoutsList} 
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.workoutsListContent}
+            >
               {todayWorkouts.length > 0 ? (
                 todayWorkouts.map(renderWorkoutItem)
               ) : (
@@ -288,7 +305,7 @@ export default function WorkoutsScreen() {
                   </ThemedText>
                 </View>
               )}
-            </View>
+            </ScrollView>
 
             <TouchableOpacity
               style={[styles.addButton, { backgroundColor: currentTheme.colors.accent }]}
@@ -342,28 +359,55 @@ export default function WorkoutsScreen() {
                 {selectedCategory && (
                   <View style={styles.exercisesList}>
                     <ThemedText style={styles.exercisesTitle}>Exercises</ThemedText>
-                    {workoutCategories[selectedCategory as keyof typeof workoutCategories].exercises.map((exercise) => (
-                      <TouchableOpacity
-                        key={exercise.name}
-                        style={[styles.exerciseButton, {
-                          backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                          borderColor: currentTheme.colors.accent,
-                        }]}
-                        onPress={() => handleExerciseSelect(exercise)}
-                      >
-                        <View style={styles.exerciseLeft}>
-                          <MaterialCommunityIcons
-                            name={exercise.icon as any}
-                            size={24}
-                            color={currentTheme.colors.accent}
-                          />
-                          <ThemedText style={styles.exerciseName}>{exercise.name}</ThemedText>
-                        </View>
-                        <ThemedText style={styles.exerciseMetric}>
-                          {exercise.metric}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    ))}
+                    {workoutCategories[selectedCategory as keyof typeof workoutCategories].exercises.map((exercise) => {
+                      const isExerciseAdded = todayWorkouts.some(w => w.name === exercise.name);
+                      return (
+                        <TouchableOpacity
+                          key={exercise.name}
+                          style={[
+                            styles.exerciseButton,
+                            {
+                              backgroundColor: isExerciseAdded ? `${currentTheme.colors.error}20` : 'rgba(255, 255, 255, 0.1)',
+                              borderColor: isExerciseAdded ? currentTheme.colors.error : currentTheme.colors.accent,
+                              opacity: isExerciseAdded ? 0.7 : 1,
+                            }
+                          ]}
+                          onPress={() => {
+                            if (!isExerciseAdded) {
+                              handleExerciseSelect(exercise);
+                            }
+                          }}
+                          disabled={isExerciseAdded}
+                        >
+                          <View style={styles.exerciseLeft}>
+                            <MaterialCommunityIcons
+                              name={exercise.icon as any}
+                              size={24}
+                              color={isExerciseAdded ? currentTheme.colors.error : currentTheme.colors.accent}
+                            />
+                            <View>
+                              <ThemedText style={[
+                                styles.exerciseName,
+                                isExerciseAdded && { color: currentTheme.colors.error }
+                              ]}>
+                                {exercise.name}
+                              </ThemedText>
+                              {isExerciseAdded && (
+                                <ThemedText style={[styles.exerciseAdded, { color: currentTheme.colors.error }]}>
+                                  Already added today
+                                </ThemedText>
+                              )}
+                            </View>
+                          </View>
+                          <ThemedText style={[
+                            styles.exerciseMetric,
+                            isExerciseAdded && { color: currentTheme.colors.error }
+                          ]}>
+                            {exercise.metric}
+                          </ThemedText>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 )}
               </View>
@@ -458,7 +502,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   workoutsList: {
-    maxHeight: 400,
+    maxHeight: 3 * 120, // Height for 3 workout items (each item is about 120px with margin)
+  },
+  workoutsListContent: {
+    flexGrow: 1,
   },
   workoutItem: {
     flexDirection: 'row',
@@ -468,6 +515,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 12,
+    minHeight: 88, // Ensure consistent height
   },
   workoutItemLeft: {
     flexDirection: 'row',
@@ -633,5 +681,9 @@ const styles = StyleSheet.create({
   addButtonText: {
     color: '#fff',
     fontWeight: '500',
+  },
+  exerciseAdded: {
+    fontSize: 12,
+    marginTop: 2,
   },
 }); 
