@@ -12,8 +12,8 @@ Reaching milestones etc...
 the The themes will be:
 Solo Leveling, 
 #190019
-#2B124C
-#522B5B
+#9054df
+#e985ff
 #854F6C
 #DFB6B2
 #FBE4D8

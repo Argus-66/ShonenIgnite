@@ -1,4 +1,4 @@
-import { StyleSheet, View, TouchableOpacity, SafeAreaView, Platform, Modal, TextInput, ScrollView } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, SafeAreaView, Platform, Modal, TextInput, ScrollView, StatusBar } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -19,6 +19,68 @@ interface UserProfile {
   bio: string;
   theme: string;
 }
+
+// Helper function to check if a color is dark
+function isColorDark(color: string) {
+  // Remove the '#' if present
+  const hex = color.replace('#', '');
+  
+  // Convert hex to RGB
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  
+  // Calculate brightness (perceived brightness formula)
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  
+  // Return true if the color is dark (brightness < 128)
+  return brightness < 128;
+}
+
+const DetailCard = ({ icon, label, value, color }: { icon: string; label: string; value: string | number; color: string }) => {
+  return (
+    <View style={[styles.detailCard, { 
+      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+      borderColor: color,
+      shadowColor: color,
+    }]}>
+      <View style={[styles.iconContainer, { 
+        backgroundColor: `${color}20`, 
+        borderColor: color,
+        shadowColor: color,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.8,
+        shadowRadius: 8,
+        elevation: 8,
+      }]}>
+        <MaterialCommunityIcons 
+          name={icon as any} 
+          size={24} 
+          color={color} 
+          style={[styles.cardIcon, {
+            textShadowColor: color,
+            textShadowOffset: { width: 0, height: 0 },
+            textShadowRadius: 8,
+          }]} 
+        />
+      </View>
+      <View style={styles.cardTextContainer}>
+        <ThemedText style={[styles.cardLabel, { 
+          color: `${color}CC`,
+          textShadowColor: color,
+          textShadowOffset: { width: 0, height: 0 },
+          textShadowRadius: 4,
+        }]}>{label}</ThemedText>
+        <ThemedText style={[styles.cardValue, { 
+          color: color,
+          textShadowColor: color,
+          textShadowOffset: { width: 0, height: 0 },
+          textShadowRadius: 8,
+        }]}>{value}</ThemedText>
+      </View>
+    </View>
+  );
+};
 
 export default function ProfileScreen() {
   const { currentTheme, setTheme, availableThemes } = useTheme();
@@ -165,64 +227,106 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
+      <StatusBar
+        barStyle={isColorDark(currentTheme.colors.background) ? "light-content" : "dark-content"}
+        backgroundColor={currentTheme.colors.background}
+      />
       <ThemedView style={styles.container}>
-        {/* Header with Actions */}
-        <View style={styles.header}>
+        {/* Header with User Info */}
+        <View style={[styles.header, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
           <View style={styles.headerLeft}>
-            <MaterialCommunityIcons 
-              name="account-circle" 
-              size={50} 
-              color={currentTheme.colors.accent}
-            />
-            <ThemedText style={styles.username}>{userProfile?.username}</ThemedText>
+            <View style={[styles.avatarContainer, { 
+              backgroundColor: `${currentTheme.colors.accent}20`,
+              borderColor: currentTheme.colors.accent 
+            }]}>
+              <MaterialCommunityIcons 
+                name="account" 
+                size={40} 
+                color={currentTheme.colors.accent}
+              />
+            </View>
+            <ThemedText style={[styles.username, { color: currentTheme.colors.accent }]}>
+              {userProfile?.username}
+            </ThemedText>
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity 
               style={[styles.actionButton, { backgroundColor: currentTheme.colors.accent }]}
               onPress={() => setShowEditModal(true)}
             >
-              <MaterialCommunityIcons name="pencil" size={20} color={currentTheme.colors.textPrimary} />
+              <MaterialCommunityIcons name="pencil" size={20} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.actionButton, { backgroundColor: currentTheme.colors.accent }]}
+              style={[styles.actionButton, { backgroundColor: currentTheme.colors.error }]}
               onPress={handleLogout}
             >
-              <MaterialCommunityIcons name="logout" size={20} color={currentTheme.colors.textPrimary} />
+              <MaterialCommunityIcons name="logout" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* User Details */}
-        <View style={[styles.detailsContainer, { backgroundColor: currentTheme.colors.card, borderColor: currentTheme.colors.border }]}>
-          <View style={styles.detailRow}>
-            <MaterialCommunityIcons name={userProfile?.gender === 'male' ? 'gender-male' : 'gender-female'} size={20} color={currentTheme.colors.accent} />
-            <ThemedText style={styles.detailText}>{userProfile?.gender}</ThemedText>
+        {/* Stats Grid */}
+        <View style={styles.statsGrid}>
+          <DetailCard
+            icon="calendar"
+            label="Age"
+            value={`${userProfile?.age || 0} years`}
+            color={currentTheme.colors.primary}
+          />
+          <DetailCard
+            icon={userProfile?.gender === 'male' ? 'gender-male' : 'gender-female'}
+            label="Gender"
+            value={userProfile?.gender || ''}
+            color={currentTheme.colors.accent}
+          />
+          <DetailCard
+            icon="human-male-height"
+            label="Height"
+            value={`${userProfile?.height || 0} cm`}
+            color={currentTheme.colors.secondary}
+          />
+          <DetailCard
+            icon="weight"
+            label="Weight"
+            value={`${userProfile?.weight || 0} kg`}
+            color={currentTheme.colors.primary}
+          />
+        </View>
+
+        {/* Bio Section */}
+        <View style={[styles.bioSection, { 
+          backgroundColor: `${currentTheme.colors.accent}15`,
+          borderColor: currentTheme.colors.accent,
+          shadowColor: currentTheme.colors.accent,
+        }]}>
+          <View style={styles.bioHeader}>
+            <MaterialCommunityIcons 
+              name="card-text-outline" 
+              size={24} 
+              color={currentTheme.colors.accent} 
+            />
+            <ThemedText style={[styles.bioTitle, { color: currentTheme.colors.accent }]}>
+              Bio
+            </ThemedText>
           </View>
-          <View style={styles.detailRow}>
-            <MaterialCommunityIcons name="calendar" size={20} color={currentTheme.colors.accent} />
-            <ThemedText style={styles.detailText}>{userProfile?.age} years</ThemedText>
-          </View>
-          <View style={styles.detailRow}>
-            <MaterialCommunityIcons name="human-male-height" size={20} color={currentTheme.colors.accent} />
-            <ThemedText style={styles.detailText}>{userProfile?.height} cm</ThemedText>
-          </View>
-          <View style={styles.detailRow}>
-            <MaterialCommunityIcons name="weight" size={20} color={currentTheme.colors.accent} />
-            <ThemedText style={styles.detailText}>{userProfile?.weight} kg</ThemedText>
-          </View>
-          <View style={styles.bioRow}>
-            <MaterialCommunityIcons name="card-text" size={20} color={currentTheme.colors.accent} />
-            <ThemedText style={styles.detailText}>{userProfile?.bio}</ThemedText>
-          </View>
+          <ThemedText style={[styles.bioText, { color: currentTheme.colors.accent }]}>
+            {userProfile?.bio || 'No bio yet'}
+          </ThemedText>
         </View>
 
         {/* Theme Button */}
         <TouchableOpacity 
-          style={[styles.themeButton, { backgroundColor: currentTheme.colors.card, borderColor: currentTheme.colors.border }]}
+          style={[styles.themeButton, { 
+            backgroundColor: `${currentTheme.colors.accent}15`,
+            borderColor: currentTheme.colors.accent,
+            shadowColor: currentTheme.colors.accent,
+          }]}
           onPress={() => setShowThemeModal(true)}
         >
-          <MaterialCommunityIcons name="palette" size={20} color={currentTheme.colors.accent} />
-          <ThemedText style={styles.themeButtonText}>Current Theme: {userProfile?.theme}</ThemedText>
+          <MaterialCommunityIcons name="palette" size={24} color={currentTheme.colors.accent} />
+          <ThemedText style={[styles.themeButtonText, { color: currentTheme.colors.accent }]}>
+            Current Theme: {userProfile?.theme}
+          </ThemedText>
         </TouchableOpacity>
 
         {/* Theme Selection Modal */}
@@ -368,65 +472,129 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   container: {
     flex: 1,
-    padding: 20,
+    padding: 16,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 16,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    gap: 12,
+  },
+  avatarContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  username: {
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 10,
-  },
-  username: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginLeft: 15,
+    gap: 8,
   },
   actionButton: {
-    padding: 10,
+    padding: 8,
     borderRadius: 8,
   },
-  detailsContainer: {
-    borderRadius: 12,
-    padding: 15,
-    borderWidth: 1,
-    gap: 12,
+  statsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+    paddingHorizontal: 4,
   },
-  detailRow: {
+  detailCard: {
+    width: '23%',
+    padding: 8,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  cardIcon: {
+    marginBottom: 0,
+  },
+  cardTextContainer: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  cardLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  cardValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  bioSection: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginBottom: 24,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  bioHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    marginBottom: 12,
+    gap: 8,
   },
-  bioRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
+  bioTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
-  detailText: {
+  bioText: {
     fontSize: 14,
+    lineHeight: 20,
   },
   themeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    padding: 15,
+    gap: 12,
+    padding: 16,
     borderRadius: 12,
-    marginTop: 20,
     borderWidth: 1,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   themeButtonText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '500',
   },
   modalOverlay: {
