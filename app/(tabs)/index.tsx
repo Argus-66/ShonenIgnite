@@ -92,7 +92,7 @@ export default function DashboardScreen() {
 
       const userData = userDoc.data();
 
-      // Load workouts from daily_workouts collection
+      // Load workouts from daily_workouts collection (templates)
       const today = new Date().toISOString().split('T')[0];
       const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
       const userWorkoutsDoc = await getDoc(userWorkoutsRef);
@@ -101,40 +101,35 @@ export default function DashboardScreen() {
       
       if (userWorkoutsDoc.exists()) {
         const data = userWorkoutsDoc.data();
-        const allWorkouts = data.workouts || [];
+        const workoutTemplates = data.workouts || [];
         
-        // Get today's workouts
-        const todaysWorkouts = allWorkouts.filter((w: any) => w.date === today);
+        // Get today's workout templates
+        const todaysWorkouts = workoutTemplates.filter((w: any) => w.date === today);
+
+        // Load progress from daily_workout_progress collection
+        const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+        const progressDoc = await getDoc(progressRef);
+        const progressData = progressDoc.exists() ? progressDoc.data() : {};
         
-        // Group workouts by name to handle multiple entries for the same workout
-        const workoutGroups = new Map<string, any[]>();
-        todaysWorkouts.forEach((workout: any) => {
-          const workouts = workoutGroups.get(workout.name) || [];
-          workouts.push(workout);
-          workoutGroups.set(workout.name, workouts);
-        });
-        
-        // Process each workout group
-        workoutGroups.forEach((workouts, name) => {
-          // Sort by timestamp to get the latest entry
-          workouts.sort((a: any, b: any) => b.timestamp - a.timestamp);
-          const latestWorkout = workouts[0];
+        // Create WorkoutProgress objects combining template and progress data
+        todaysWorkouts.forEach((template: any) => {
+          // Get progress data for this workout if it exists
+          const progress = progressData[template.name]?.[today];
           
-          // Create WorkoutProgress object
-          const workoutProgress: WorkoutProgress = {
-            workoutId: name.toLowerCase().replace(/\s+/g, '-'), // For XP calculation
-            name: name,
-            icon: latestWorkout.icon,
-            metric: latestWorkout.metric,
-            unit: latestWorkout.unit,
-            targetValue: latestWorkout.value, // Use the initial value as target
-            currentValue: latestWorkout.value, // Use the latest value as current
-            completed: latestWorkout.completed || false,
+          const workoutItem: WorkoutProgress = {
+            workoutId: template.name.toLowerCase().replace(/\s+/g, '-'),
+            name: template.name,
+            icon: template.icon,
+            metric: template.metric,
+            unit: template.unit,
+            targetValue: template.value,
+            currentValue: progress?.value || 0,
+            completed: progress?.completed || false,
             date: today,
-            timestamp: latestWorkout.timestamp,
+            timestamp: progress?.timestamp || template.timestamp,
           };
           
-          dailyWorkouts.push(workoutProgress);
+          dailyWorkouts.push(workoutItem);
         });
         
         // Sort by timestamp
@@ -243,56 +238,59 @@ export default function DashboardScreen() {
     if (!auth.currentUser || !stats || !editingWorkout || !progressValue) return;
 
     try {
-      const value = parseFloat(progressValue);
+      let value = parseFloat(progressValue);
       if (isNaN(value)) return;
+
+      // Cap the value at targetValue if it exceeds it
+      if (value > editingWorkout.targetValue) {
+        value = editingWorkout.targetValue;
+      }
 
       const today = new Date().toISOString().split('T')[0];
       const timestamp = Date.now();
       
-      const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
-      const userWorkoutsDoc = await getDoc(userWorkoutsRef);
+      // Get reference to user's progress document
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+      const progressDoc = await getDoc(progressRef);
       
-      if (userWorkoutsDoc.exists()) {
-        const data = userWorkoutsDoc.data();
-        const allWorkouts = data.workouts || [];
-        
-        // Check if this update completes the workout
-        const isCompleted = value >= editingWorkout.targetValue;
-        
-        // Create new workout entry
-        const newWorkout = {
-          name: editingWorkout.name,
-          icon: editingWorkout.icon,
-          metric: editingWorkout.metric,
-          unit: editingWorkout.unit,
-          value: value,
-          completed: isCompleted,
-          timestamp,
-          date: today,
-        };
-        
-        // Add the new workout entry
-        await updateDoc(userWorkoutsRef, {
-          workouts: [...allWorkouts, newWorkout]
+      // Check if this update completes the workout
+      const isCompleted = value >= editingWorkout.targetValue;
+      
+      // Create new progress entry
+      const newProgress = {
+        value: value,
+        completed: isCompleted,
+        timestamp,
+        date: today
+      };
+      
+      // Update or create the progress document
+      if (progressDoc.exists()) {
+        await updateDoc(progressRef, {
+          [`${editingWorkout.name}.${today}`]: newProgress
         });
-
-        // If completed, calculate and award XP
-        if (isCompleted && !editingWorkout.completed) {
-          const xpGained = calculateWorkoutXP({
-            ...editingWorkout,
-            currentValue: value,
-            completed: true
-          });
-
-          if (xpGained > 0) {
-            await updateUserXP(xpGained);
+      } else {
+        await setDoc(progressRef, {
+          [editingWorkout.name]: {
+            [today]: newProgress
           }
-        }
-        
-        // Reload dashboard data
-        await loadDashboardData();
+        });
       }
 
+      // If completed, calculate and award XP
+      if (isCompleted && !editingWorkout.completed) {
+        const xpGained = calculateWorkoutXP({
+          ...editingWorkout,
+          currentValue: value,
+          completed: true
+        });
+
+        if (xpGained > 0) {
+          await updateUserXP(xpGained);
+        }
+      }
+      
+      await loadDashboardData();
       setShowEditModal(false);
       setProgressValue('');
       setEditingWorkout(null);
@@ -308,46 +306,48 @@ export default function DashboardScreen() {
       const today = new Date().toISOString().split('T')[0];
       const timestamp = Date.now();
       
-      const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
-      const userWorkoutsDoc = await getDoc(userWorkoutsRef);
+      // Get reference to user's progress document
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+      const progressDoc = await getDoc(progressRef);
       
-      if (userWorkoutsDoc.exists()) {
-        const data = userWorkoutsDoc.data();
-        const allWorkouts = data.workouts || [];
-        
-        // Create new completed workout entry
-        const newWorkout = {
-          name: workout.name,
-          icon: workout.icon,
-          metric: workout.metric,
-          unit: workout.unit,
-          value: workout.targetValue, // Set to target value when completing
-          completed: true,
-          timestamp,
-          date: today,
-        };
-        
-        // Add the new workout entry
-        await updateDoc(userWorkoutsRef, {
-          workouts: [...allWorkouts, newWorkout]
+      // Create new progress entry for completion
+      const newProgress = {
+        value: workout.targetValue,
+        completed: true,
+        timestamp,
+        date: today
+      };
+      
+      // Update or create the progress document
+      if (progressDoc.exists()) {
+        // Update the specific workout's progress
+        await updateDoc(progressRef, {
+          [`${workout.name}.${today}`]: newProgress
+        });
+      } else {
+        // Create new document with initial progress
+        await setDoc(progressRef, {
+          [workout.name]: {
+            [today]: newProgress
+          }
+        });
+      }
+
+      // Calculate and award XP if not already completed
+      if (!workout.completed) {
+        const xpGained = calculateWorkoutXP({
+          ...workout,
+          currentValue: workout.targetValue,
+          completed: true
         });
 
-        // Calculate and award XP if not already completed
-        if (!workout.completed) {
-          const xpGained = calculateWorkoutXP({
-            ...workout,
-            currentValue: workout.targetValue,
-            completed: true
-          });
-
-          if (xpGained > 0) {
-            await updateUserXP(xpGained);
-          }
+        if (xpGained > 0) {
+          await updateUserXP(xpGained);
         }
-        
-        // Reload dashboard data
-        await loadDashboardData();
       }
+      
+      // Reload dashboard data
+      await loadDashboardData();
     } catch (error) {
       console.error('Error completing workout:', error);
     }
@@ -360,37 +360,33 @@ export default function DashboardScreen() {
       const today = new Date().toISOString().split('T')[0];
       const timestamp = Date.now();
       
-      const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
-      const userWorkoutsDoc = await getDoc(userWorkoutsRef);
+      // Get reference to user's progress document
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+      const progressDoc = await getDoc(progressRef);
       
-      if (userWorkoutsDoc.exists()) {
-        const data = userWorkoutsDoc.data();
-        const allWorkouts = data.workouts || [];
-        
-        // Keep all workouts that are not from today or have a different name
-        const filteredWorkouts = allWorkouts.filter(
-          (w: any) => !(w.name === workout.name && w.date === today)
-        );
-        
-        // Add a new reset workout entry
-        const resetWorkout = {
-          name: workout.name,
-          icon: workout.icon,
-          metric: workout.metric,
-          unit: workout.unit,
-          value: 0,
-          completed: false,
-          timestamp,
-          date: today,
-        };
-        
-        await updateDoc(userWorkoutsRef, { 
-          workouts: [...filteredWorkouts, resetWorkout] 
+      // Create new progress entry with reset values
+      const resetProgress = {
+        value: 0,
+        completed: false,
+        timestamp,
+        date: today
+      };
+      
+      // Update or create the progress document
+      if (progressDoc.exists()) {
+        await updateDoc(progressRef, {
+          [`${workout.name}.${today}`]: resetProgress
         });
-        
-        // Reload dashboard data
-        await loadDashboardData();
+      } else {
+        await setDoc(progressRef, {
+          [workout.name]: {
+            [today]: resetProgress
+          }
+        });
       }
+      
+      // Reload dashboard data
+      await loadDashboardData();
     } catch (error) {
       console.error('Error resetting workout:', error);
     }
@@ -551,6 +547,59 @@ export default function DashboardScreen() {
     );
   };
 
+  // Update modal styles with correct types
+  const modalStyles = StyleSheet.create({
+    modalContainer: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center' as const,
+      padding: 20,
+    },
+    modalContent: {
+      width: '90%' as const,
+      backgroundColor: currentTheme.colors.background,
+      borderRadius: 16,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.accent,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: '600' as const,
+      color: currentTheme.colors.text,
+      marginBottom: 20,
+    },
+    input: {
+      height: 48,
+      borderWidth: 1,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      marginBottom: 20,
+      backgroundColor: currentTheme.colors.background,
+      color: currentTheme.colors.text,
+      borderColor: currentTheme.colors.accent,
+    },
+    modalButtons: {
+      flexDirection: 'row' as const,
+      justifyContent: 'flex-end',
+      gap: 12,
+    },
+    button: {
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      borderRadius: 8,
+      minWidth: 100,
+      alignItems: 'center' as const,
+    },
+    buttonText: {
+      color: '#fff',
+      fontWeight: '600' as const,
+      fontSize: 16,
+    },
+  });
+
   if (loading || !stats) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -652,34 +701,35 @@ export default function DashboardScreen() {
             setEditingWorkout(null);
           }}
         >
-          <View style={styles.modalContainer}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>
+          <View style={modalStyles.modalContainer}>
+            <View style={modalStyles.modalContent}>
+              <Text style={modalStyles.modalTitle}>
                 Update {editingWorkout?.name} Progress
               </Text>
               <TextInput
-                style={styles.input}
+                style={modalStyles.input}
                 value={progressValue}
                 onChangeText={setProgressValue}
                 keyboardType="numeric"
                 placeholder={`Enter value in ${editingWorkout?.unit}`}
+                placeholderTextColor={`${currentTheme.colors.text}50`}
               />
-              <View style={styles.modalButtons}>
+              <View style={modalStyles.modalButtons}>
                 <TouchableOpacity
-                  style={[styles.button, styles.cancelButton]}
+                  style={[modalStyles.button, { backgroundColor: currentTheme.colors.error }]}
                   onPress={() => {
                     setShowEditModal(false);
                     setProgressValue('');
                     setEditingWorkout(null);
                   }}
                 >
-                  <Text style={styles.buttonText}>Cancel</Text>
+                  <Text style={modalStyles.buttonText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.button, styles.saveButton]}
+                  style={[modalStyles.button, { backgroundColor: currentTheme.colors.accent }]}
                   onPress={handleUpdateProgress}
                 >
-                  <Text style={styles.buttonText}>Save</Text>
+                  <Text style={modalStyles.buttonText}>Save</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -813,52 +863,6 @@ const styles = StyleSheet.create({
   progressBar: {
     height: '100%',
     borderRadius: 2,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    width: '90%',
-    borderRadius: 16,
-    padding: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  input: {
-    flex: 1,
-    height: 48,
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  button: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#E53E3E',
-  },
-  saveButton: {
-    backgroundColor: '#48BB78',
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '500',
   },
   celebrationContainer: {
     alignItems: 'center',
