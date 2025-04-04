@@ -1,10 +1,10 @@
-import { StyleSheet, View, ScrollView, TouchableOpacity, Platform, StatusBar, Modal, TextInput } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, Platform, StatusBar, Modal, TextInput, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { auth, db } from '@/config/firebase';
 import { doc, updateDoc, getDoc, collection, query, where, getDocs, deleteDoc, addDoc, setDoc, arrayUnion } from 'firebase/firestore';
 
@@ -101,6 +101,7 @@ export default function WorkoutsScreen() {
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const [exerciseValue, setExerciseValue] = useState('');
   const [todayWorkouts, setTodayWorkouts] = useState<Exercise[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadTodayWorkouts();
@@ -272,14 +273,31 @@ export default function WorkoutsScreen() {
     );
   };
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadTodayWorkouts();
+    setRefreshing(false);
+  }, []);
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
       <StatusBar
         barStyle="light-content"
         backgroundColor={currentTheme.colors.background}
       />
-      <ThemedView style={styles.container}>
-        <ScrollView style={styles.mainScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[currentTheme.colors.accent]}
+            tintColor={currentTheme.colors.accent}
+          />
+        }
+      >
+        <ThemedView style={styles.container}>
           {/* Daily Workouts Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -467,8 +485,8 @@ export default function WorkoutsScreen() {
               </View>
             </View>
           </Modal>
-        </ScrollView>
-      </ThemedView>
+        </ThemedView>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -482,7 +500,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  mainScroll: {
+  scrollView: {
     flex: 1,
   },
   section: {

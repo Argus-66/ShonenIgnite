@@ -1,10 +1,10 @@
-import { StyleSheet, View, TouchableOpacity, ScrollView, Platform, StatusBar, Modal, TextInput, Animated, Dimensions, Text } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ScrollView, Platform, StatusBar, Modal, TextInput, Animated, Dimensions, Text, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { auth, db } from '@/config/firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { WorkoutProgress, UserStats, calculateLevel } from '@/types/workout';
@@ -65,6 +65,7 @@ export default function DashboardScreen() {
   const { currentTheme } = useTheme();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState<WorkoutProgress | null>(null);
   const [progressValue, setProgressValue] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
@@ -80,6 +81,8 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     loadDashboardData();
+    // Clean up incomplete workouts from previous days
+    cleanupIncompleteWorkouts();
   }, []);
 
   const loadDashboardData = async () => {
@@ -600,6 +603,63 @@ export default function DashboardScreen() {
     },
   });
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadDashboardData();
+    setRefreshing(false);
+  }, []);
+
+  const cleanupIncompleteWorkouts = async () => {
+    if (!auth.currentUser) return;
+
+    try {
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+      const progressDoc = await getDoc(progressRef);
+      
+      if (progressDoc.exists()) {
+        const data = progressDoc.data();
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        
+        // Check each workout's progress
+        const updatedData: { [key: string]: any } = {};
+        let hasChanges = false;
+        
+        Object.entries(data).forEach(([workoutName, workoutData]: [string, any]) => {
+          const filteredDates: { [key: string]: any } = {};
+          
+          Object.entries(workoutData).forEach(([date, progress]: [string, any]) => {
+            // Keep the progress if:
+            // 1. It's not from yesterday or before, or
+            // 2. It has a value greater than 0 or is marked as completed
+            if (
+              date > yesterdayStr || 
+              (progress.value > 0 || progress.completed)
+            ) {
+              filteredDates[date] = progress;
+            } else {
+              hasChanges = true;
+            }
+          });
+          
+          if (Object.keys(filteredDates).length > 0) {
+            updatedData[workoutName] = filteredDates;
+          } else {
+            hasChanges = true;
+          }
+        });
+        
+        // Only update if we removed any data
+        if (hasChanges) {
+          await setDoc(progressRef, updatedData);
+        }
+      }
+    } catch (error) {
+      console.error('Error cleaning up incomplete workouts:', error);
+    }
+  };
+
   if (loading || !stats) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -616,29 +676,39 @@ export default function DashboardScreen() {
         barStyle="light-content"
         backgroundColor={currentTheme.colors.background}
       />
-      <ThemedView style={styles.container}>
-        {/* Celebration Animation */}
-        {renderCelebration()}
+      <ScrollView 
+        style={styles.mainScrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[currentTheme.colors.accent]}
+            tintColor={currentTheme.colors.accent}
+          />
+        }
+      >
+        <ThemedView style={styles.container}>
+          {renderCelebration()}
 
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <ThemedText style={[styles.welcomeText, { color: currentTheme.colors.accent }]}>
-              Welcome back,
-            </ThemedText>
-            <ThemedText style={[styles.username, { color: currentTheme.colors.accent }]}>
-              {stats.username}
-            </ThemedText>
+          {/* Header */}
+          <View style={styles.header}>
+            <View>
+              <ThemedText style={[styles.welcomeText, { color: currentTheme.colors.accent }]}>
+                Welcome back,
+              </ThemedText>
+              <ThemedText style={[styles.username, { color: currentTheme.colors.accent }]}>
+                {stats.username}
+              </ThemedText>
+            </View>
+            <View style={[styles.coinsContainer, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
+              <MaterialCommunityIcons name="currency-usd" size={20} color={currentTheme.colors.accent} />
+              <ThemedText style={[styles.coinsText, { color: currentTheme.colors.accent }]}>
+                {stats.coins}
+              </ThemedText>
+            </View>
           </View>
-          <View style={[styles.coinsContainer, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
-            <MaterialCommunityIcons name="currency-usd" size={20} color={currentTheme.colors.accent} />
-            <ThemedText style={[styles.coinsText, { color: currentTheme.colors.accent }]}>
-              {stats.coins}
-            </ThemedText>
-          </View>
-        </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {/* Level Progress */}
           <View style={[styles.section, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
             <View style={styles.sectionHeader}>
@@ -684,58 +754,59 @@ export default function DashboardScreen() {
             <ScrollView 
               style={styles.workoutsScrollView} 
               showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
             >
               {renderDailyWorkouts()}
             </ScrollView>
           </View>
-        </ScrollView>
+        </ThemedView>
+      </ScrollView>
 
-        {/* Edit Progress Modal */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={showEditModal}
-          onRequestClose={() => {
-            setShowEditModal(false);
-            setProgressValue('');
-            setEditingWorkout(null);
-          }}
-        >
-          <View style={modalStyles.modalContainer}>
-            <View style={modalStyles.modalContent}>
-              <Text style={modalStyles.modalTitle}>
-                Update {editingWorkout?.name} Progress
-              </Text>
-              <TextInput
-                style={modalStyles.input}
-                value={progressValue}
-                onChangeText={setProgressValue}
-                keyboardType="numeric"
-                placeholder={`Enter value in ${editingWorkout?.unit}`}
-                placeholderTextColor={`${currentTheme.colors.text}50`}
-              />
-              <View style={modalStyles.modalButtons}>
-                <TouchableOpacity
-                  style={[modalStyles.button, { backgroundColor: currentTheme.colors.error }]}
-                  onPress={() => {
-                    setShowEditModal(false);
-                    setProgressValue('');
-                    setEditingWorkout(null);
-                  }}
-                >
-                  <Text style={modalStyles.buttonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[modalStyles.button, { backgroundColor: currentTheme.colors.accent }]}
-                  onPress={handleUpdateProgress}
-                >
-                  <Text style={modalStyles.buttonText}>Save</Text>
-                </TouchableOpacity>
-              </View>
+      {/* Edit Progress Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showEditModal}
+        onRequestClose={() => {
+          setShowEditModal(false);
+          setProgressValue('');
+          setEditingWorkout(null);
+        }}
+      >
+        <View style={modalStyles.modalContainer}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>
+              Update {editingWorkout?.name} Progress
+            </Text>
+            <TextInput
+              style={modalStyles.input}
+              value={progressValue}
+              onChangeText={setProgressValue}
+              keyboardType="numeric"
+              placeholder={`Enter value in ${editingWorkout?.unit}`}
+              placeholderTextColor={`${currentTheme.colors.text}50`}
+            />
+            <View style={modalStyles.modalButtons}>
+              <TouchableOpacity
+                style={[modalStyles.button, { backgroundColor: currentTheme.colors.error }]}
+                onPress={() => {
+                  setShowEditModal(false);
+                  setProgressValue('');
+                  setEditingWorkout(null);
+                }}
+              >
+                <Text style={modalStyles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[modalStyles.button, { backgroundColor: currentTheme.colors.accent }]}
+                onPress={handleUpdateProgress}
+              >
+                <Text style={modalStyles.buttonText}>Save</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-      </ThemedView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -934,5 +1005,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.8,
     marginTop: 4,
+  },
+  mainScrollView: {
+    flex: 1,
   },
 });
