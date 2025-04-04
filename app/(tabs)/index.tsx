@@ -106,7 +106,7 @@ export default function DashboardScreen() {
         // Get today's workouts
         const todaysWorkouts = allWorkouts.filter((w: any) => w.date === today);
         
-        // Group workouts by name and process each group
+        // Group workouts by name to handle multiple entries for the same workout
         const workoutGroups = new Map<string, any[]>();
         todaysWorkouts.forEach((workout: any) => {
           const workouts = workoutGroups.get(workout.name) || [];
@@ -114,24 +114,21 @@ export default function DashboardScreen() {
           workoutGroups.set(workout.name, workouts);
         });
         
-        // Process each group to create WorkoutProgress objects
+        // Process each workout group
         workoutGroups.forEach((workouts, name) => {
           // Sort by timestamp to get the latest entry
           workouts.sort((a: any, b: any) => b.timestamp - a.timestamp);
           const latestWorkout = workouts[0];
           
-          // Find the first workout of the day (for target value)
-          const firstWorkout = workouts[workouts.length - 1];
-          
           // Create WorkoutProgress object
           const workoutProgress: WorkoutProgress = {
-            workoutId: name,
+            workoutId: name.toLowerCase().replace(/\s+/g, '-'), // For XP calculation
             name: name,
             icon: latestWorkout.icon,
             metric: latestWorkout.metric,
             unit: latestWorkout.unit,
-            targetValue: firstWorkout.value,
-            currentValue: latestWorkout.value,
+            targetValue: latestWorkout.value, // Use the initial value as target
+            currentValue: latestWorkout.value, // Use the latest value as current
             completed: latestWorkout.completed || false,
             date: today,
             timestamp: latestWorkout.timestamp,
@@ -142,9 +139,6 @@ export default function DashboardScreen() {
         
         // Sort by timestamp
         dailyWorkouts.sort((a, b) => b.timestamp - a.timestamp);
-      } else {
-        // Create the document if it doesn't exist
-        await setDoc(userWorkoutsRef, { workouts: [] });
       }
 
       setStats({
@@ -156,11 +150,6 @@ export default function DashboardScreen() {
         },
         dailyWorkouts,
       });
-
-      // Check if all workouts are completed
-      if (dailyWorkouts.length > 0) {
-        checkAllWorkoutsCompleted(dailyWorkouts);
-      }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -267,22 +256,40 @@ export default function DashboardScreen() {
         const data = userWorkoutsDoc.data();
         const allWorkouts = data.workouts || [];
         
-        // Convert to Exercise format for storage
+        // Check if this update completes the workout
+        const isCompleted = value >= editingWorkout.targetValue;
+        
+        // Create new workout entry
         const newWorkout = {
           name: editingWorkout.name,
           icon: editingWorkout.icon,
           metric: editingWorkout.metric,
           unit: editingWorkout.unit,
           value: value,
+          completed: isCompleted,
           timestamp,
           date: today,
         };
         
+        // Add the new workout entry
         await updateDoc(userWorkoutsRef, {
           workouts: [...allWorkouts, newWorkout]
         });
+
+        // If completed, calculate and award XP
+        if (isCompleted && !editingWorkout.completed) {
+          const xpGained = calculateWorkoutXP({
+            ...editingWorkout,
+            currentValue: value,
+            completed: true
+          });
+
+          if (xpGained > 0) {
+            await updateUserXP(xpGained);
+          }
+        }
         
-        // Reload dashboard data to ensure consistency
+        // Reload dashboard data
         await loadDashboardData();
       }
 
@@ -308,31 +315,34 @@ export default function DashboardScreen() {
         const data = userWorkoutsDoc.data();
         const allWorkouts = data.workouts || [];
         
-        // Convert to Exercise format for storage
+        // Create new completed workout entry
         const newWorkout = {
           name: workout.name,
           icon: workout.icon,
           metric: workout.metric,
           unit: workout.unit,
-          value: workout.targetValue,
-          completed: true, // Mark as completed
+          value: workout.targetValue, // Set to target value when completing
+          completed: true,
           timestamp,
           date: today,
         };
         
+        // Add the new workout entry
         await updateDoc(userWorkoutsRef, {
           workouts: [...allWorkouts, newWorkout]
         });
 
-        // Calculate and update XP
-        const xpGained = calculateWorkoutXP({
-          ...workout,
-          currentValue: workout.targetValue,
-          completed: true
-        });
+        // Calculate and award XP if not already completed
+        if (!workout.completed) {
+          const xpGained = calculateWorkoutXP({
+            ...workout,
+            currentValue: workout.targetValue,
+            completed: true
+          });
 
-        if (xpGained > 0) {
-          await updateUserXP(xpGained);
+          if (xpGained > 0) {
+            await updateUserXP(xpGained);
+          }
         }
         
         // Reload dashboard data
