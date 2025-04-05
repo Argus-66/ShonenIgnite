@@ -1,4 +1,4 @@
-import { StyleSheet, View, TouchableOpacity, SafeAreaView, Platform, Modal, TextInput, ScrollView, StatusBar, Dimensions, RefreshControl } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, SafeAreaView, Modal, TextInput, ScrollView, StatusBar, RefreshControl } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -8,6 +8,11 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useEffect, useState, useCallback } from 'react';
 import { router } from 'expo-router';
 import { Theme, themes } from '@/constants/Themes';
+import { ActivitySection } from '@/components/profile/ActivitySection';
+import { ProfileHeader } from '@/components/profile/ProfileHeader';
+import { UserStats } from '@/components/profile/UserStats';
+import { BioSection } from '@/components/profile/BioSection';
+import { ThemeSelector } from '@/components/profile/ThemeSelector';
 
 interface UserProfile {
   username: string;
@@ -22,136 +27,418 @@ interface UserProfile {
   bestStreak: number;
 }
 
-interface WorkoutHeatmapProps {
-  month: Date;
-  data: { [date: string]: number };
-  maxValue: number;
-  onDayPress?: (date: string, count: number) => void;
+interface DetailCardProps {
+  icon: string;
+  label: string;
+  value: string;
+  color: string;
 }
 
-const WorkoutHeatmap: React.FC<WorkoutHeatmapProps> = ({ month, data, maxValue, onDayPress }) => {
+const DetailCard: React.FC<DetailCardProps> = ({ icon, label, value, color }) => {
   const { currentTheme } = useTheme();
-  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
-  
-  const getColor = (count: number) => {
-    if (count === 0) return `${currentTheme.colors.accent}15`;
-    const intensity = Math.min((count / maxValue) * 0.8 + 0.2, 1);
-    const color = `${currentTheme.colors.accent}${Math.floor(intensity * 255).toString(16).padStart(2, '0')}`;
-    return color;
-  };
-
-  const renderDays = () => {
-    const days = [];
-    const cellSize = (Dimensions.get('window').width - 64) / 7;
-
-    // Add empty cells for days before the first of the month
-    for (let i = 0; i < firstDay; i++) {
-      days.push(<View key={`empty-${i}`} style={[styles.dayCell, { width: cellSize, height: cellSize }]} />);
-    }
-
-    // Add cells for each day of the month
-    for (let i = 1; i <= daysInMonth; i++) {
-      const date = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-      const count = data[date] || 0;
-      const color = getColor(count);
-      
-      days.push(
-        <TouchableOpacity
-          key={date}
-          style={[
-            styles.dayCell,
-            {
-              width: cellSize,
-              height: cellSize,
-              backgroundColor: color,
-              shadowColor: color,
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: count > 0 ? 0.8 : 0,
-              shadowRadius: Math.min(count * 2, 8),
-              elevation: count > 0 ? Math.min(count * 2, 8) : 0,
-            },
-          ]}
-          onPress={() => onDayPress?.(date, count)}
-        >
-          <ThemedText style={[styles.dayText, { opacity: count > 0 ? 1 : 0.7 }]}>{i}</ThemedText>
-        </TouchableOpacity>
-      );
-    }
-
-    return days;
-  };
-
   return (
-    <View style={styles.heatmapContainer}>
-      <View style={styles.daysGrid}>
-        {renderDays()}
-      </View>
-    </View>
-  );
-};
-
-// Helper function to check if a color is dark
-function isColorDark(color: string) {
-  // Remove the '#' if present
-  const hex = color.replace('#', '');
-  
-  // Convert hex to RGB
-  const r = parseInt(hex.substr(0, 2), 16);
-  const g = parseInt(hex.substr(2, 2), 16);
-  const b = parseInt(hex.substr(4, 2), 16);
-  
-  // Calculate brightness (perceived brightness formula)
-  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-  
-  // Return true if the color is dark (brightness < 128)
-  return brightness < 128;
-}
-
-const DetailCard = ({ icon, label, value, color }: { icon: string; label: string; value: string | number; color: string }) => {
-  return (
-    <View style={[styles.detailCard, { 
-      backgroundColor: 'rgba(255, 255, 255, 0.1)',
-      borderColor: color,
-      shadowColor: color,
-    }]}>
-      <View style={[styles.iconContainer, { 
-        backgroundColor: `${color}20`, 
+    <View style={[
+      styles.detailCard, 
+      { 
+        backgroundColor: currentTheme.colors.card,
         borderColor: color,
-        shadowColor: color,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.8,
-        shadowRadius: 8,
-        elevation: 8,
-      }]}>
-        <MaterialCommunityIcons 
-          name={icon as any} 
-          size={24} 
-          color={color} 
-          style={[styles.cardIcon, {
-            textShadowColor: color,
-            textShadowOffset: { width: 0, height: 0 },
-            textShadowRadius: 8,
-          }]} 
-        />
-      </View>
-      <View style={styles.cardTextContainer}>
-        <ThemedText style={[styles.cardLabel, { 
-          color: `${color}CC`,
-          textShadowColor: color,
-          textShadowOffset: { width: 0, height: 0 },
-          textShadowRadius: 4,
-        }]}>{label}</ThemedText>
-        <ThemedText style={[styles.cardValue, { 
-          color: color,
-          textShadowColor: color,
-          textShadowOffset: { width: 0, height: 0 },
-          textShadowRadius: 8,
-        }]}>{value}</ThemedText>
+        borderWidth: 1,
+        borderRadius: 10,
+        margin: 4,
+        width: '46%',
+        padding: 12
+      }
+    ]}>
+      <ThemedText style={[styles.detailLabel, { color: color, textAlign: 'center', marginBottom: 4 }]}>
+        {label}
+      </ThemedText>
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 4
+      }}>
+        <MaterialCommunityIcons name={icon as any} size={20} color={color} />
+        <ThemedText style={[styles.detailValue, { color: currentTheme.colors.text, marginLeft: 8, fontWeight: 'bold' }]}>
+          {value}
+        </ThemedText>
       </View>
     </View>
   );
 };
+
+// Helper function to determine if a color is dark
+const isColorDark = (color: string): boolean => {
+  // Handle rgba format
+  if (color.startsWith('rgba')) {
+    const values = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+)/);
+    if (values) {
+      const r = parseInt(values[1]);
+      const g = parseInt(values[2]);
+      const b = parseInt(values[3]);
+      // Calculate relative luminance
+      return (r * 0.299 + g * 0.587 + b * 0.114) < 128;
+    }
+  }
+  
+  // Handle hex format with alpha
+  if (color.startsWith('#') && (color.length === 9 || color.length === 5)) {
+    color = color.substring(0, 7); // Remove alpha component
+  }
+  
+  // Handle hex format
+  if (color.startsWith('#')) {
+    const r = parseInt(color.slice(1, 3), 16);
+    const g = parseInt(color.slice(3, 5), 16);
+    const b = parseInt(color.slice(5, 7), 16);
+    // Calculate relative luminance
+    return (r * 0.299 + g * 0.587 + b * 0.114) < 128;
+  }
+  
+  // Default to assuming light color if format is unknown
+  return false;
+};
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatarContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  username: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 16,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 'auto',
+  },
+  actionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  statBlock: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 10,
+    width: '23%',
+    borderWidth: 1,
+    borderColor: '#333',
+    backgroundColor: '#1c1c2e',
+  },
+  statIcon: {
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginVertical: 2,
+  },
+  statValue: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  activityStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    padding: 16,
+    marginTop: 8,
+  },
+  bioSection: {
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    shadowColor: 'transparent',
+  },
+  bioHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  bioTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  bioText: {
+    fontSize: 16,
+  },
+  themeButton: {
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    shadowColor: 'transparent',
+  },
+  themeButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  themeOption: {
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    shadowColor: 'transparent',
+  },
+  themeOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  themeColorPreviews: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  themeColorPreview: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: 4,
+  },
+  themeOptionText: {
+    fontSize: 16,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  modalActions: {
+    borderTopWidth: 1,
+    borderTopColor: 'transparent',
+  },
+  modalButton: {
+    flex: 1,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  activitySection: {
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    shadowColor: 'transparent',
+    marginBottom: 24,
+  },
+  activityTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  activityContent: {
+    padding: 16,
+    borderRadius: 16,
+  },
+  monthNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  monthText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginHorizontal: 16,
+  },
+  dayCell: {
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  dayText: {
+    opacity: 0.7,
+    fontWeight: '500',
+  },
+  dayDetailHeader: {
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  workoutItem: {
+    backgroundColor: 'rgba(0, 0, 0, 0.03)',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4F9DDE'
+  },
+  detailCard: {
+    alignItems: 'center',
+    padding: 12,
+    marginVertical: 4,
+    width: '48%',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  detailContent: {
+    marginLeft: 16,
+  },
+  detailLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  detailValue: {
+    fontSize: 15,
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  modalContent: {
+    width: '90%',
+    maxWidth: 400,
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  themeModalContent: {
+    width: '90%',
+    maxWidth: 400,
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  themeList: {
+    maxHeight: 400,
+  },
+  editModalContent: {
+    width: '90%',
+    maxWidth: 400,
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  editForm: {
+    marginVertical: 16,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  inputWithValue: {
+    width: '100%',
+  },
+  currentValue: {
+    fontSize: 12,
+    marginBottom: 4,
+    opacity: 0.7,
+  },
+  input: {
+    height: 40,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+  },
+  bioInput: {
+    height: 80,
+    textAlignVertical: 'top',
+    paddingTop: 12,
+  },
+  emptyState: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    opacity: 0.7,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+});
 
 export default function ProfileScreen() {
   const { currentTheme, setTheme, availableThemes } = useTheme();
@@ -164,6 +451,7 @@ export default function ProfileScreen() {
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [workoutData, setWorkoutData] = useState<{ [date: string]: number }>({});
   const [maxWorkouts, setMaxWorkouts] = useState(0);
+  const [selectedDay, setSelectedDay] = useState<{ date: string; count: number } | null>(null);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -230,7 +518,6 @@ export default function ProfileScreen() {
     try {
       const userRef = doc(db, 'users', auth.currentUser.uid);
       
-      // Only update fields that have changed
       const updates: Partial<UserProfile> = {};
       if (editableProfile.age) updates.age = editableProfile.age;
       if (editableProfile.height) updates.height = editableProfile.height;
@@ -240,7 +527,7 @@ export default function ProfileScreen() {
       if (editableProfile.bestStreak) updates.bestStreak = editableProfile.bestStreak;
 
       await updateDoc(userRef, updates);
-      await loadUserProfile(); // Reload the profile after update
+      await loadUserProfile();
       setShowEditModal(false);
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -256,7 +543,7 @@ export default function ProfileScreen() {
         theme: themeName
       });
       setTheme(themeName);
-      await loadUserProfile(); // Reload the profile after update
+      await loadUserProfile();
       setShowThemeModal(false);
     } catch (error) {
       console.error('Error updating theme:', error);
@@ -267,7 +554,6 @@ export default function ProfileScreen() {
     if (!auth.currentUser) return;
 
     try {
-      // Get all dates where workouts were completed
       const workoutDates = new Set<string>();
       Object.values(progressData).forEach((workoutData: any) => {
         Object.entries(workoutData).forEach(([date, progress]: [string, any]) => {
@@ -277,11 +563,9 @@ export default function ProfileScreen() {
         });
       });
 
-      // Convert to array and sort
       const sortedDates = Array.from(workoutDates).sort();
       if (sortedDates.length === 0) return { currentStreak: 0, bestStreak: 0 };
 
-      // Calculate current streak
       const today = new Date().toISOString().split('T')[0];
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
@@ -290,7 +574,6 @@ export default function ProfileScreen() {
       let currentStreak = 0;
       let i = sortedDates.length - 1;
       
-      // If last workout was today or yesterday, start counting streak
       if (sortedDates[i] === today || sortedDates[i] === yesterdayStr) {
         currentStreak = 1;
         let prevDate = new Date(sortedDates[i]);
@@ -310,7 +593,6 @@ export default function ProfileScreen() {
         }
       }
 
-      // Calculate best streak
       let bestStreak = currentStreak;
       let tempStreak = 1;
       
@@ -327,7 +609,6 @@ export default function ProfileScreen() {
         }
       }
 
-      // Update user profile with new streak values
       const userRef = doc(db, 'users', auth.currentUser.uid);
       await updateDoc(userRef, {
         streak: currentStreak,
@@ -353,7 +634,6 @@ export default function ProfileScreen() {
         const monthData: { [date: string]: number } = {};
         let max = 0;
 
-        // Process all workouts
         Object.values(data).forEach((workoutData: any) => {
           Object.entries(workoutData).forEach(([date, progress]: [string, any]) => {
             const progressDate = new Date(date);
@@ -371,9 +651,8 @@ export default function ProfileScreen() {
         setWorkoutData(monthData);
         setMaxWorkouts(max);
 
-        // Calculate and update streaks
         await calculateStreaks(data);
-        await loadUserProfile(); // Reload profile to get updated streak values
+        await loadUserProfile();
       }
     } catch (error) {
       console.error('Error loading workout data:', error);
@@ -384,6 +663,22 @@ export default function ProfileScreen() {
     const newDate = new Date(selectedMonth);
     newDate.setMonth(newDate.getMonth() + increment);
     setSelectedMonth(newDate);
+  };
+
+  const handleDayPress = (date: string, count: number) => {
+    setSelectedDay({ date, count });
+    console.log(`Selected day: ${date}, workout count: ${count}`);
+  };
+
+  // Helper function to format date for the modal title
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
   };
 
   if (!currentTheme || !availableThemes) {
@@ -420,6 +715,7 @@ export default function ProfileScreen() {
             backgroundColor: theme.colors.background,
             borderColor: isSelected ? theme.colors.accent : theme.colors.border,
             borderWidth: isSelected ? 2 : 1,
+            borderRadius: 12
           }
         ]}
         onPress={() => handleThemeChange(themeName)}
@@ -458,104 +754,37 @@ export default function ProfileScreen() {
         }
       >
         <ThemedView style={styles.container}>
-          {/* Header with User Info */}
-          <View style={[styles.header, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
-            <View style={styles.headerLeft}>
-              <View style={[styles.avatarContainer, { 
-                backgroundColor: `${currentTheme.colors.accent}20`,
-                borderColor: currentTheme.colors.accent 
-              }]}>
-                <MaterialCommunityIcons 
-                  name="account" 
-                  size={40} 
-                  color={currentTheme.colors.accent}
-                />
-              </View>
-              <ThemedText style={[styles.username, { color: currentTheme.colors.accent }]}>
-                {userProfile?.username}
-              </ThemedText>
-            </View>
-            <View style={styles.headerActions}>
-              <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: currentTheme.colors.accent }]}
-                onPress={() => setShowEditModal(true)}
-              >
-                <MaterialCommunityIcons name="pencil" size={20} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: currentTheme.colors.error }]}
-                onPress={handleLogout}
-              >
-                <MaterialCommunityIcons name="logout" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
+          <ProfileHeader
+            username={userProfile?.username || ""}
+            onEditPress={() => setShowEditModal(true)}
+            onLogoutPress={handleLogout}
+          />
 
-          {/* Stats Grid */}
-          <View style={styles.statsGrid}>
-            <DetailCard
-              icon="calendar"
-              label="Age"
-              value={`${userProfile?.age || 0} years`}
-              color={currentTheme.colors.primary}
-            />
-            <DetailCard
-              icon={userProfile?.gender === 'male' ? 'gender-male' : 'gender-female'}
-              label="Gender"
-              value={userProfile?.gender || ''}
-              color={currentTheme.colors.accent}
-            />
-            <DetailCard
-              icon="human-male-height"
-              label="Height"
-              value={`${userProfile?.height || 0} cm`}
-              color={currentTheme.colors.secondary}
-            />
-            <DetailCard
-              icon="weight"
-              label="Weight"
-              value={`${userProfile?.weight || 0} kg`}
-              color={currentTheme.colors.primary}
-            />
-          </View>
+          <UserStats
+            age={userProfile?.age || 0}
+            gender={userProfile?.gender || "male"}
+            height={userProfile?.height || 0}
+            weight={userProfile?.weight || 0}
+          />
 
-          {/* Bio Section */}
-          <View style={[styles.bioSection, { 
-            backgroundColor: `${currentTheme.colors.accent}15`,
-            borderColor: currentTheme.colors.accent,
-            shadowColor: currentTheme.colors.accent,
-          }]}>
-            <View style={styles.bioHeader}>
-              <MaterialCommunityIcons 
-                name="card-text-outline" 
-                size={24} 
-                color={currentTheme.colors.accent} 
-              />
-              <ThemedText style={[styles.bioTitle, { color: currentTheme.colors.accent }]}>
-                Bio
-              </ThemedText>
-            </View>
-            <ThemedText style={[styles.bioText, { color: currentTheme.colors.accent }]}>
-              {userProfile?.bio || 'No bio yet'}
-            </ThemedText>
-          </View>
+          <BioSection bio={userProfile?.bio || ""} />
 
-          {/* Theme Button */}
-          <TouchableOpacity 
-            style={[styles.themeButton, { 
-              backgroundColor: `${currentTheme.colors.accent}15`,
-              borderColor: currentTheme.colors.accent,
-              shadowColor: currentTheme.colors.accent,
-            }]}
+          <ThemeSelector
+            currentThemeName={userProfile?.theme || "default"}
             onPress={() => setShowThemeModal(true)}
-          >
-            <MaterialCommunityIcons name="palette" size={24} color={currentTheme.colors.accent} />
-            <ThemedText style={[styles.themeButtonText, { color: currentTheme.colors.accent }]}>
-              Current Theme: {userProfile?.theme}
-            </ThemedText>
-          </TouchableOpacity>
+          />
 
-          {/* Theme Selection Modal */}
+          <ActivitySection
+            selectedMonth={selectedMonth}
+            workoutData={workoutData}
+            maxWorkouts={maxWorkouts}
+            totalWorkouts={Object.values(workoutData).reduce((a, b) => a + b, 0)}
+            currentStreak={userProfile?.streak || 0}
+            bestStreak={userProfile?.bestStreak || 0}
+            onMonthChange={handleMonthChange}
+            onDayPress={handleDayPress}
+          />
+
           <Modal
             visible={showThemeModal}
             transparent
@@ -563,7 +792,7 @@ export default function ProfileScreen() {
             onRequestClose={() => setShowThemeModal(false)}
           >
             <View style={styles.modalOverlay}>
-              <View style={[styles.themeModalContent, { backgroundColor: currentTheme.colors.background }]}>
+              <View style={[styles.themeModalContent, { backgroundColor: currentTheme.colors.background, borderRadius: 16 }]}>
                 <View style={styles.modalHeader}>
                   <ThemedText style={styles.modalTitle}>Choose Your Theme</ThemedText>
                   <TouchableOpacity onPress={() => setShowThemeModal(false)}>
@@ -579,7 +808,6 @@ export default function ProfileScreen() {
             </View>
           </Modal>
 
-          {/* Edit Profile Modal */}
           <Modal
             visible={showEditModal}
             transparent
@@ -587,7 +815,7 @@ export default function ProfileScreen() {
             onRequestClose={() => setShowEditModal(false)}
           >
             <View style={styles.modalOverlay}>
-              <View style={[styles.editModalContent, { backgroundColor: currentTheme.colors.background }]}>
+              <View style={[styles.editModalContent, { backgroundColor: currentTheme.colors.background, borderRadius: 16 }]}>
                 <View style={styles.modalHeader}>
                   <ThemedText style={styles.modalTitle}>Edit Profile</ThemedText>
                   <TouchableOpacity onPress={() => setShowEditModal(false)}>
@@ -691,368 +919,63 @@ export default function ProfileScreen() {
             </View>
           </Modal>
 
-          {/* Activity Section */}
-          <View style={styles.activitySection}>
-            <ThemedText style={styles.activityTitle}>Activity</ThemedText>
-            <View style={styles.activityContent}>
-              {/* Month Navigation */}
-              <View style={styles.monthNav}>
-                <TouchableOpacity onPress={() => handleMonthChange(-1)}>
-                  <MaterialCommunityIcons name="chevron-left" size={24} color={currentTheme.colors.accent} />
-                </TouchableOpacity>
-                <ThemedText style={styles.monthText}>
-                  {selectedMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
-                </ThemedText>
-                <TouchableOpacity onPress={() => handleMonthChange(1)}>
-                  <MaterialCommunityIcons name="chevron-right" size={24} color={currentTheme.colors.accent} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Activity Stats */}
-              <View style={styles.activityStats}>
-                <View style={[styles.statBox, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
-                  <MaterialCommunityIcons name="dumbbell" size={24} color={currentTheme.colors.accent} />
-                  <ThemedText style={styles.statValue}>{Object.values(workoutData).reduce((a, b) => a + b, 0)}</ThemedText>
-                  <ThemedText style={styles.statLabel}>Total Workouts</ThemedText>
+          <Modal
+            animationType="slide"
+            transparent={true}
+            visible={!!selectedDay}
+            onRequestClose={() => setSelectedDay(null)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, { backgroundColor: currentTheme.colors.card, borderRadius: 16 }]}>
+                <View style={styles.modalHeader}>
+                  <ThemedText style={styles.modalTitle}>
+                    {selectedDay && formatDate(selectedDay.date)}
+                  </ThemedText>
+                  <TouchableOpacity onPress={() => setSelectedDay(null)}>
+                    <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.text} />
+                  </TouchableOpacity>
                 </View>
-                <View style={[styles.statBox, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
-                  <MaterialCommunityIcons name="fire" size={24} color={currentTheme.colors.accent} />
-                  <ThemedText style={styles.statValue}>{userProfile?.streak || 0}</ThemedText>
-                  <ThemedText style={styles.statLabel}>Current Streak</ThemedText>
-                </View>
-                <View style={[styles.statBox, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
-                  <MaterialCommunityIcons name="trophy" size={24} color={currentTheme.colors.accent} />
-                  <ThemedText style={styles.statValue}>{userProfile?.bestStreak || 0}</ThemedText>
-                  <ThemedText style={styles.statLabel}>Best Streak</ThemedText>
-                </View>
-              </View>
-
-              {/* Workout Heatmap */}
-              <View style={[styles.heatmapSection, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
-                <WorkoutHeatmap
-                  month={selectedMonth}
-                  data={workoutData}
-                  maxValue={maxWorkouts}
-                  onDayPress={(date, count) => {
-                    if (count > 0) {
-                      console.log(`${count} workouts completed on ${date}`);
-                    }
-                  }}
-                />
+                {selectedDay && (
+                  <ScrollView style={{ maxHeight: 400 }}>
+                    <View style={styles.dayDetailHeader}>
+                      <MaterialCommunityIcons name="dumbbell" size={24} color={currentTheme.colors.text} />
+                      <ThemedText style={{ fontSize: 16, fontWeight: 'bold' }}>
+                        {selectedDay.count} {selectedDay.count === 1 ? 'Workout' : 'Workouts'}
+                      </ThemedText>
+                    </View>
+                    
+                    {selectedDay.count > 0 ? (
+                      // Here you'd normally fetch workouts for this day and display them
+                      // For now, we'll show placeholders
+                      Array(selectedDay.count).fill(0).map((_, index) => (
+                        <View key={index} style={styles.workoutItem}>
+                          <ThemedText style={{ fontSize: 16, fontWeight: 'bold' }}>Workout {index + 1}</ThemedText>
+                          <ThemedText style={{ fontSize: 14, marginTop: 4 }}>
+                            {index % 2 === 0 ? "Strength Training" : "Cardio"}
+                          </ThemedText>
+                          <ThemedText style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+                            {45 + index * 10} minutes • {index % 2 === 0 ? "220 calories" : "350 calories"}
+                          </ThemedText>
+                        </View>
+                      ))
+                    ) : (
+                      <View style={styles.emptyState}>
+                        <MaterialCommunityIcons name="dumbbell" size={48} color={`${currentTheme.colors.text}50`} />
+                        <ThemedText style={styles.emptyStateText}>
+                          No workouts on this day
+                        </ThemedText>
+                        <ThemedText style={styles.emptyStateSubtext}>
+                          Rest days are important too!
+                        </ThemedText>
+                      </View>
+                    )}
+                  </ScrollView>
+                )}
               </View>
             </View>
-          </View>
+          </Modal>
         </ThemedView>
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-    padding: 16,
-    borderRadius: 16,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-  },
-  avatarContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  username: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    padding: 8,
-    borderRadius: 8,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-    paddingHorizontal: 4,
-  },
-  detailCard: {
-    width: '23%',
-    padding: 8,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  cardIcon: {
-    marginBottom: 0,
-  },
-  cardTextContainer: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  cardLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  cardValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  bioSection: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    marginBottom: 24,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  bioHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    gap: 8,
-  },
-  bioTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  bioText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  themeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  themeButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  themeModalContent: {
-    width: '90%',
-    maxHeight: '70%',
-    borderRadius: 16,
-    padding: 20,
-  },
-  editModalContent: {
-    width: '90%',
-    maxHeight: '80%',
-    borderRadius: 16,
-    padding: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  themeList: {
-    maxHeight: '90%',
-  },
-  editForm: {
-    maxHeight: '80%',
-  },
-  themeOptionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  themeColorPreviews: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  themeColorPreview: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-  },
-  themeOptionText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 5,
-  },
-  inputWithValue: {
-    gap: 5,
-  },
-  currentValue: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 16,
-  },
-  bioInput: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 10,
-    marginTop: 20,
-    paddingTop: 10,
-    borderTopWidth: 1,
-  },
-  modalButton: {
-    padding: 10,
-    borderRadius: 8,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  modalButtonText: {
-    color: '#fff',
-    fontWeight: '500',
-  },
-  themeOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 15,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 10,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  inputContainer: {
-    marginBottom: 15,
-  },
-  activitySection: {
-    marginTop: 24,
-  },
-  activityTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  activityContent: {
-    padding: 16,
-    borderRadius: 16,
-  },
-  monthNav: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 16,
-  },
-  monthText: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  heatmapSection: {
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 24,
-  },
-  heatmapContainer: {
-    width: '100%',
-  },
-  daysGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  dayCell: {
-    borderRadius: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  dayText: {
-    fontSize: 12,
-    opacity: 0.7,
-  },
-  activityStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-    gap: 12,
-  },
-  statBox: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  statLabel: {
-    fontSize: 12,
-    opacity: 0.7,
-    textAlign: 'center',
-  },
-}); 

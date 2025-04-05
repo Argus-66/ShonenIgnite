@@ -18,6 +18,21 @@ interface DashboardStats {
   dailyWorkouts: WorkoutProgress[];
 }
 
+interface WorkoutProgress {
+  value: number;
+  completed: boolean;
+  timestamp: number;
+  date: string;
+}
+
+interface DailyProgress {
+  [date: string]: WorkoutProgress;
+}
+
+interface ProgressData {
+  [workoutName: string]: DailyProgress;
+}
+
 // Add XP calculation constants
 const XP_RATES = {
   // Cardiovascular
@@ -89,65 +104,71 @@ export default function DashboardScreen() {
     if (!auth.currentUser) return;
 
     try {
-      // Load user data
-      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-      if (!userDoc.exists()) return;
-
-      const userData = userDoc.data();
-
-      // Load workouts from daily_workouts collection (templates)
       const today = new Date().toISOString().split('T')[0];
-      const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
-      const userWorkoutsDoc = await getDoc(userWorkoutsRef);
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      const workoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
       
-      let dailyWorkouts: WorkoutProgress[] = [];
-      
-      if (userWorkoutsDoc.exists()) {
-        const data = userWorkoutsDoc.data();
-        const workoutTemplates = data.workouts || [];
-        
-        // Get today's workout templates
-        const todaysWorkouts = workoutTemplates.filter((w: any) => w.date === today);
+      const [userDoc, workoutsDoc, progressDoc] = await Promise.all([
+        getDoc(userRef),
+        getDoc(workoutsRef),
+        getDoc(progressRef)
+      ]);
 
-        // Load progress from daily_workout_progress collection
-        const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
-        const progressDoc = await getDoc(progressRef);
-        const progressData = progressDoc.exists() ? progressDoc.data() : {};
-        
-        // Create WorkoutProgress objects combining template and progress data
-        todaysWorkouts.forEach((template: any) => {
-          // Get progress data for this workout if it exists
-          const progress = progressData[template.name]?.[today];
-          
-          const workoutItem: WorkoutProgress = {
-            workoutId: template.name.toLowerCase().replace(/\s+/g, '-'),
-            name: template.name,
-            icon: template.icon,
-            metric: template.metric,
-            unit: template.unit,
-            targetValue: template.value,
-            currentValue: progress?.value || 0,
-            completed: progress?.completed || false,
-            date: today,
-            timestamp: progress?.timestamp || template.timestamp,
-          };
-          
-          dailyWorkouts.push(workoutItem);
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        setStats({
+          username: userData.username,
+          coins: userData.coins || 0,
+          stats: {
+            totalXP: userData.totalXP || 0,
+            ...calculateLevel(userData.totalXP || 0),
+          },
+          dailyWorkouts: [],
         });
-        
-        // Sort by timestamp
-        dailyWorkouts.sort((a, b) => b.timestamp - a.timestamp);
       }
 
-      setStats({
-        username: userData.username,
-        coins: userData.coins || 0,
-        stats: {
-          totalXP: userData.totalXP || 0,
-          ...calculateLevel(userData.totalXP || 0),
-        },
-        dailyWorkouts,
-      });
+      // Get all workouts from daily_workouts collection
+      if (workoutsDoc.exists()) {
+        const workoutsData = workoutsDoc.data();
+        const allWorkouts = workoutsData.workouts || [];
+
+        // Get today's progress for these workouts
+        const progressData = progressDoc.exists() ? progressDoc.data() as ProgressData : {};
+        
+        // Create a map of workout names to their latest values
+        const latestWorkouts = new Map();
+        allWorkouts.forEach((workout: any) => {
+          const existingWorkout = latestWorkouts.get(workout.name);
+          if (!existingWorkout || workout.timestamp > existingWorkout.timestamp) {
+            latestWorkouts.set(workout.name, workout);
+          }
+        });
+
+        // Convert to array and get today's progress if it exists
+        const workoutProgress = Array.from(latestWorkouts.values()).map((workout: any) => {
+          const todayProgress = progressData[workout.name]?.[today];
+          return {
+            name: workout.name,
+            icon: workout.icon,
+            metric: workout.metric,
+            unit: workout.unit,
+            targetValue: workout.value,
+            currentValue: todayProgress?.value || 0,
+            completed: todayProgress?.completed || false,
+            timestamp: workout.timestamp,
+            date: workout.date
+          };
+        });
+
+        // Sort by timestamp, most recent first
+        workoutProgress.sort((a, b) => b.timestamp - a.timestamp);
+        
+        setStats(prev => prev ? {
+          ...prev,
+          dailyWorkouts: workoutProgress,
+        } : null);
+      }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {

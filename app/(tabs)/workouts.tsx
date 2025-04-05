@@ -111,18 +111,19 @@ export default function WorkoutsScreen() {
     if (!auth.currentUser) return;
 
     try {
-      const today = new Date().toISOString().split('T')[0];
       const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
       const userWorkoutsDoc = await getDoc(userWorkoutsRef);
       
       if (userWorkoutsDoc.exists()) {
         const data = userWorkoutsDoc.data();
         const allWorkouts = data.workouts || [];
-        const todaysWorkouts = allWorkouts
-          .filter((w: Exercise) => w.date === today)
-          .sort((a: Exercise, b: Exercise) => (b.timestamp || 0) - (a.timestamp || 0));
         
-        setTodayWorkouts(todaysWorkouts);
+        // Sort by timestamp, most recent first
+        const sortedWorkouts = allWorkouts.sort((a: Exercise, b: Exercise) => 
+          (b.timestamp || 0) - (a.timestamp || 0)
+        );
+        
+        setTodayWorkouts(sortedWorkouts);
       } else {
         // Create the document if it doesn't exist
         await setDoc(userWorkoutsRef, { workouts: [] });
@@ -304,11 +305,7 @@ export default function WorkoutsScreen() {
               <ThemedText style={styles.sectionTitle}>Daily Workout</ThemedText>
             </View>
             
-            <ScrollView 
-              style={styles.workoutsList} 
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.workoutsListContent}
-            >
+            <View style={styles.workoutsList}>
               {todayWorkouts.length > 0 ? (
                 todayWorkouts.map(renderWorkoutItem)
               ) : (
@@ -323,7 +320,7 @@ export default function WorkoutsScreen() {
                   </ThemedText>
                 </View>
               )}
-            </ScrollView>
+            </View>
 
             <TouchableOpacity
               style={[styles.addButton, { backgroundColor: currentTheme.colors.accent }]}
@@ -333,160 +330,160 @@ export default function WorkoutsScreen() {
               <ThemedText style={styles.addButtonText}>Add Workout</ThemedText>
             </TouchableOpacity>
           </View>
-
-          {/* Category Selection Modal */}
-          <Modal
-            visible={showWorkoutModal}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setShowWorkoutModal(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={[styles.modalContent, { backgroundColor: currentTheme.colors.background }]}>
-                <View style={styles.modalHeader}>
-                  <ThemedText style={styles.modalTitle}>Choose Workout Type</ThemedText>
-                  <TouchableOpacity onPress={() => setShowWorkoutModal(false)}>
-                    <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.text} />
-                  </TouchableOpacity>
-                </View>
-
-                <ScrollView style={styles.categoriesList}>
-                  {Object.entries(workoutCategories).map(([key, category]) => (
-                    <TouchableOpacity
-                      key={key}
-                      style={[styles.categoryButton, {
-                        backgroundColor: selectedCategory === key ? currentTheme.colors.accent : 'rgba(255, 255, 255, 0.1)',
-                      }]}
-                      onPress={() => handleCategorySelect(key)}
-                    >
-                      <MaterialCommunityIcons
-                        name={category.icon as any}
-                        size={24}
-                        color={selectedCategory === key ? '#fff' : currentTheme.colors.accent}
-                      />
-                      <ThemedText style={[
-                        styles.categoryText,
-                        selectedCategory === key && { color: '#fff' }
-                      ]}>
-                        {category.title}
-                      </ThemedText>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-
-                {selectedCategory && (
-                  <View style={styles.exercisesList}>
-                    <ThemedText style={styles.exercisesTitle}>Exercises</ThemedText>
-                    {workoutCategories[selectedCategory as keyof typeof workoutCategories].exercises.map((exercise) => {
-                      const isExerciseAdded = todayWorkouts.some(w => w.name === exercise.name);
-                      return (
-                        <TouchableOpacity
-                          key={exercise.name}
-                          style={[
-                            styles.exerciseButton,
-                            {
-                              backgroundColor: isExerciseAdded ? `${currentTheme.colors.error}20` : 'rgba(255, 255, 255, 0.1)',
-                              borderColor: isExerciseAdded ? currentTheme.colors.error : currentTheme.colors.accent,
-                              opacity: isExerciseAdded ? 0.7 : 1,
-                            }
-                          ]}
-                          onPress={() => {
-                            if (!isExerciseAdded) {
-                              handleExerciseSelect(exercise);
-                            }
-                          }}
-                          disabled={isExerciseAdded}
-                        >
-                          <View style={styles.exerciseLeft}>
-                            <MaterialCommunityIcons
-                              name={exercise.icon as any}
-                              size={24}
-                              color={isExerciseAdded ? currentTheme.colors.error : currentTheme.colors.accent}
-                            />
-                            <View>
-                              <ThemedText style={[
-                                styles.exerciseName,
-                                isExerciseAdded && { color: currentTheme.colors.error }
-                              ]}>
-                                {exercise.name}
-                              </ThemedText>
-                              {isExerciseAdded && (
-                                <ThemedText style={[styles.exerciseAdded, { color: currentTheme.colors.error }]}>
-                                  Already added today
-                                </ThemedText>
-                              )}
-                            </View>
-                          </View>
-                          <ThemedText style={[
-                            styles.exerciseMetric,
-                            isExerciseAdded && { color: currentTheme.colors.error }
-                          ]}>
-                            {exercise.metric}
-                          </ThemedText>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-            </View>
-          </Modal>
-
-          {/* Exercise Value Input Modal */}
-          <Modal
-            visible={showExerciseModal}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setShowExerciseModal(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={[styles.modalContent, { backgroundColor: currentTheme.colors.background }]}>
-                <View style={styles.modalHeader}>
-                  <ThemedText style={styles.modalTitle}>{selectedExercise?.name}</ThemedText>
-                  <TouchableOpacity onPress={() => setShowExerciseModal(false)}>
-                    <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.text} />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.inputContainer}>
-                  <ThemedText style={styles.inputLabel}>
-                    Enter {selectedExercise?.metric.toLowerCase()}:
-                  </ThemedText>
-                  <View style={styles.inputWrapper}>
-                    <TextInput
-                      style={[styles.input, {
-                        color: currentTheme.colors.text,
-                        borderColor: currentTheme.colors.border,
-                      }]}
-                      value={exerciseValue}
-                      onChangeText={setExerciseValue}
-                      keyboardType="numeric"
-                      placeholder={`Enter ${selectedExercise?.metric.toLowerCase()}`}
-                      placeholderTextColor={currentTheme.colors.text + '80'}
-                    />
-                    <ThemedText style={styles.unitText}>{selectedExercise?.unit}</ThemedText>
-                  </View>
-                </View>
-
-                <View style={styles.modalActions}>
-                  <TouchableOpacity
-                    style={[styles.modalButton, { backgroundColor: currentTheme.colors.error }]}
-                    onPress={() => setShowExerciseModal(false)}
-                  >
-                    <ThemedText style={styles.modalButtonText}>Cancel</ThemedText>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.modalButton, { backgroundColor: currentTheme.colors.accent }]}
-                    onPress={handleSaveExercise}
-                  >
-                    <ThemedText style={styles.modalButtonText}>Save</ThemedText>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </Modal>
         </ThemedView>
       </ScrollView>
+
+      {/* Category Selection Modal */}
+      <Modal
+        visible={showWorkoutModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowWorkoutModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: currentTheme.colors.background }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Choose Workout Type</ThemedText>
+              <TouchableOpacity onPress={() => setShowWorkoutModal(false)}>
+                <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.categoriesList}>
+              {Object.entries(workoutCategories).map(([key, category]) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.categoryButton, {
+                    backgroundColor: selectedCategory === key ? currentTheme.colors.accent : 'rgba(255, 255, 255, 0.1)',
+                  }]}
+                  onPress={() => handleCategorySelect(key)}
+                >
+                  <MaterialCommunityIcons
+                    name={category.icon as any}
+                    size={24}
+                    color={selectedCategory === key ? '#fff' : currentTheme.colors.accent}
+                  />
+                  <ThemedText style={[
+                    styles.categoryText,
+                    selectedCategory === key && { color: '#fff' }
+                  ]}>
+                    {category.title}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {selectedCategory && (
+              <View style={styles.exercisesList}>
+                <ThemedText style={styles.exercisesTitle}>Exercises</ThemedText>
+                {workoutCategories[selectedCategory as keyof typeof workoutCategories].exercises.map((exercise) => {
+                  const isExerciseAdded = todayWorkouts.some(w => w.name === exercise.name);
+                  return (
+                    <TouchableOpacity
+                      key={exercise.name}
+                      style={[
+                        styles.exerciseButton,
+                        {
+                          backgroundColor: isExerciseAdded ? `${currentTheme.colors.error}20` : 'rgba(255, 255, 255, 0.1)',
+                          borderColor: isExerciseAdded ? currentTheme.colors.error : currentTheme.colors.accent,
+                          opacity: isExerciseAdded ? 0.7 : 1,
+                        }
+                      ]}
+                      onPress={() => {
+                        if (!isExerciseAdded) {
+                          handleExerciseSelect(exercise);
+                        }
+                      }}
+                      disabled={isExerciseAdded}
+                    >
+                      <View style={styles.exerciseLeft}>
+                        <MaterialCommunityIcons
+                          name={exercise.icon as any}
+                          size={24}
+                          color={isExerciseAdded ? currentTheme.colors.error : currentTheme.colors.accent}
+                        />
+                        <View>
+                          <ThemedText style={[
+                            styles.exerciseName,
+                            isExerciseAdded && { color: currentTheme.colors.error }
+                          ]}>
+                            {exercise.name}
+                          </ThemedText>
+                          {isExerciseAdded && (
+                            <ThemedText style={[styles.exerciseAdded, { color: currentTheme.colors.error }]}>
+                              Already added today
+                            </ThemedText>
+                          )}
+                        </View>
+                      </View>
+                      <ThemedText style={[
+                        styles.exerciseMetric,
+                        isExerciseAdded && { color: currentTheme.colors.error }
+                      ]}>
+                        {exercise.metric}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Exercise Value Input Modal */}
+      <Modal
+        visible={showExerciseModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowExerciseModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: currentTheme.colors.background }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>{selectedExercise?.name}</ThemedText>
+              <TouchableOpacity onPress={() => setShowExerciseModal(false)}>
+                <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inputContainer}>
+              <ThemedText style={styles.inputLabel}>
+                Enter {selectedExercise?.metric.toLowerCase()}:
+              </ThemedText>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={[styles.input, {
+                    color: currentTheme.colors.text,
+                    borderColor: currentTheme.colors.border,
+                  }]}
+                  value={exerciseValue}
+                  onChangeText={setExerciseValue}
+                  keyboardType="numeric"
+                  placeholder={`Enter ${selectedExercise?.metric.toLowerCase()}`}
+                  placeholderTextColor={currentTheme.colors.text + '80'}
+                />
+                <ThemedText style={styles.unitText}>{selectedExercise?.unit}</ThemedText>
+              </View>
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: currentTheme.colors.error }]}
+                onPress={() => setShowExerciseModal(false)}
+              >
+                <ThemedText style={styles.modalButtonText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: currentTheme.colors.accent }]}
+                onPress={handleSaveExercise}
+              >
+                <ThemedText style={styles.modalButtonText}>Save</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -496,18 +493,18 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
+  scrollView: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     padding: 16,
   },
-  scrollView: {
-    flex: 1,
-  },
   section: {
+    flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -520,10 +517,8 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   workoutsList: {
-    maxHeight: 3 * 120, // Height for 3 workout items (each item is about 120px with margin)
-  },
-  workoutsListContent: {
-    flexGrow: 1,
+    flex: 1,
+    marginBottom: 16,
   },
   workoutItem: {
     flexDirection: 'row',
