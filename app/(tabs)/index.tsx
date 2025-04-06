@@ -228,19 +228,40 @@ export default function DashboardScreen() {
     userRef: DocumentReference, 
     userData: DocumentData
   ) => {
-    // XP values for different workout types - each completed workout gives a fixed XP amount
-    const workoutXPValues: Record<string, number> = {
-      'Running': 10,
-      'Cycling': 8,
-      'Swimming': 12,
-      'Walking': 5,
-      'Weightlifting': 8,
-      'Yoga': 6,
-      'Push-ups': 7,
-      'Sit-ups': 7,
-      'Squats': 7,
-      'Planks': 8,
-      'Jumping Jacks': 6
+    // XP rates for different workout types based on their unit and value
+    const workoutXPRates: Record<string, {unit: string, xpPerUnit: number}> = {
+      'Running': { unit: 'km', xpPerUnit: 3 },
+      'Cycling': { unit: 'km', xpPerUnit: 2 },
+      'Swimming': { unit: 'km', xpPerUnit: 4 },
+      'Walking': { unit: 'km', xpPerUnit: 1 },
+      
+      'Push-ups': { unit: 'reps', xpPerUnit: 0.1 },   // 1 XP per 10 reps
+      'Pull-ups': { unit: 'reps', xpPerUnit: 0.2 },   // 1 XP per 5 reps
+      'Squats': { unit: 'reps', xpPerUnit: 0.1 },     // 1 XP per 10 reps
+      'Planks': { unit: 'minutes', xpPerUnit: 0.5 },  // 0.5 XP per minute
+      
+      'Static Stretching': { unit: 'minutes', xpPerUnit: 0.1 },    // 0.5 XP per 5 min
+      'Dynamic Stretching': { unit: 'minutes', xpPerUnit: 0.1 },   // 0.5 XP per 5 min
+      'Yoga': { unit: 'minutes', xpPerUnit: 0.2 },                 // 2 XP per 10 min
+      'Pilates': { unit: 'minutes', xpPerUnit: 0.2 },              // 2 XP per 10 min
+      'PNF Stretching': { unit: 'minutes', xpPerUnit: 0.1 },       // 0.5 XP per 5 min
+      
+      'Tai Chi': { unit: 'minutes', xpPerUnit: 0.2 },              // 2 XP per 10 min
+      'Yoga Balance': { unit: 'minutes', xpPerUnit: 0.2 },         // 1 XP per 5 min
+      'Single-Leg Stand': { unit: 'minutes', xpPerUnit: 0.25 },    // 0.5 XP per 2 min
+      'Heel-to-Toe Walking': { unit: 'minutes', xpPerUnit: 0.1 },  // 0.5 XP per 5 min
+      'Balance Board': { unit: 'minutes', xpPerUnit: 0.17 },       // 0.5 XP per 3 min
+      
+      'Sprint Intervals': { unit: 'meters', xpPerUnit: 0.03 },     // 3 XP per 100m
+      'Circuit Training': { unit: 'minutes', xpPerUnit: 0.6 },     // 3 XP per 5 min
+      'Tabata': { unit: 'minutes', xpPerUnit: 0.75 },              // 3 XP per 4 min
+      'Burpees': { unit: 'reps', xpPerUnit: 0.2 },                 // 2 XP per 10 reps
+      'Box Jumps': { unit: 'reps', xpPerUnit: 0.2 },               // 2 XP per 10 reps
+      
+      'Lunges': { unit: 'reps', xpPerUnit: 0.1 },                 // 1 XP per 10 reps
+      'Step-Ups': { unit: 'reps', xpPerUnit: 0.1 },               // 1 XP per 10 reps
+      'Medicine Ball Throws': { unit: 'reps', xpPerUnit: 0.1 },   // 1 XP per 10 reps
+      'Kettlebell Swings': { unit: 'reps', xpPerUnit: 0.1 }       // 1 XP per 10 reps
     };
 
     try {
@@ -273,9 +294,9 @@ export default function DashboardScreen() {
           return;
         }
         
-        // Get XP value for this workout type
-        const baseXP = workoutXPValues[workoutName] || 5;
-        console.log(`Processing workout: ${workoutName} (base XP: ${baseXP})`);
+        // Get XP rate for this workout type (default to a reasonable value if not found)
+        const xpRate = workoutXPRates[workoutName] || { unit: 'reps', xpPerUnit: 0.1 };
+        console.log(`Processing workout: ${workoutName} (XP rate: ${xpRate.xpPerUnit} per ${xpRate.unit})`);
         
         // Process each date entry for this workout
         Object.entries(dateEntries).forEach(([date, entry]) => {
@@ -294,9 +315,15 @@ export default function DashboardScreen() {
           // Initialize this date's XP if not exists
           if (!dailyXP[date]) dailyXP[date] = 0;
           
+          // Get workout value
+          const value = (entry as any).value || 0;
+          
+          // Calculate XP based on workout value and XP rate
+          const earnedXP = Math.floor(value * xpRate.xpPerUnit);
+          
           // Add XP for completed workout
-          dailyXP[date] += baseXP;
-          console.log(`Added ${baseXP} XP for ${workoutName} on ${date}, total for day: ${dailyXP[date]}`);
+          dailyXP[date] += earnedXP;
+          console.log(`Added ${earnedXP} XP for ${workoutName} on ${date} (${value} ${xpRate.unit}), total for day: ${dailyXP[date]}`);
         });
       });
       

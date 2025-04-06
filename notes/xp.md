@@ -1,36 +1,39 @@
-Category               Exercise                  Metric          Unit         XP per Unit
-------------------------------------------------------------------------------------------
-Cardiovascular         Running                   Distance        km           2 XP
-                       Cycling                   Distance        km           2 XP
-                       Swimming                  Distance        km           2 XP
-                       Walking                   Distance        km           2 XP
+Category               Exercise                  Metric          Unit         XP per Unit         Notes
+--------------------------------------------------------------------------------------------------------------
+Cardiovascular         Running                   Distance        km           3 XP                Medium-High Intensity
+                       Cycling                   Distance        km           2 XP                Medium Intensity
+                       Swimming                  Distance        km           4 XP                High Intensity
+                       Walking                   Distance        km           1 XP                Low Intensity
 
-Strength Training      Push-ups                  Reps            reps         1 XP    (10 = 1 XP)
-                       Pull-ups                  Reps            reps         1 XP    (10 = 1 XP)
-                       Squats                    Reps            reps         1 XP    (10 = 1 XP)
-                       Planks                    Time            minutes      0.5 XP  (2min = 0.5 XP)
+Strength Training      Push-ups                  Reps            10 reps      1 XP                Bodyweight Strength
+                       Pull-ups                  Reps            5 reps       1 XP                Harder than push-ups
+                       Squats                    Reps            10 reps      1 XP                Basic Strength
+                       Planks                    Time            1 min        0.5 XP              Static core work
 
-Flexibility & Mobility Static Stretching         Time            minutes      0.5 XP    (5min = 0.5 XP)
-                       Dynamic Stretching        Time            minutes      0.5 XP    (5min = 0.5 XP)
-                       Yoga                      Time/Session    session      1 XP      (5min = 1 XP)
-                       Pilates                   Time/Session    session      1 XP      (5min = 1 XP)
-                       PNF Stretching            Time            minutes      0.5 XP    (5min = 0.5 XP)
+Flexibility & Mobility Static Stretching         Time            5 min        0.5 XP              Low Intensity
+                       Dynamic Stretching        Time            5 min        0.5 XP              Warm-up level
+                       Yoga                      Time/Session    10 min       2 XP                Moderate effort
+                       Pilates                   Time/Session    10 min       2 XP                Core + Mobility
+                       PNF Stretching            Time            5 min        0.5 XP              Focused flexibility
 
-Balance & Stability    Tai Chi                   Time/Session    session      1 XP      (5min = 1 XP)
-                       Yoga Balance Poses        Time/Session    session      1 XP      (5min = 1 XP)
-                       Single-Leg Stand          Time            minutes      0.5 XP    (5min = 0.5 XP)
-                       Heel-to-Toe Walking       Distance/Time   unit         0.5 XP    (5min = 0.5 XP)
-                       Balance Board             Time            minutes      0.5 XP    (5min = 0.5 XP)
+Balance & Stability    Tai Chi                   Time/Session    10 min       2 XP                Coordination & Balance
+                       Yoga Balance Poses        Time/Session    5 min        1 XP                Focus & Control
+                       Single-Leg Stand          Time            2 min        0.5 XP              Core & Balance
+                       Heel-to-Toe Walking       Time            5 min        0.5 XP              Low effort
+                       Balance Board             Time            3 min        0.5 XP              Fun + Stability
 
-HIIT                   Sprint Intervals          Distance        100 m        2 XP
-                       Circuit Training          Time            minutes      2 XP
-                       Tabata                    Time            minutes      2 XP
-                       Burpees                   Reps            reps         1 XP
-                       Box Jumps                 Reps            reps         1 XP
+HIIT                   Sprint Intervals          Distance        100 m        3 XP                High effort burst
+                       Circuit Training          Time            5 min        3 XP                Mixed high effort
+                       Tabata                    Time            4 min        3 XP                Intense structured HIIT
+                       Burpees                   Reps            10 reps      2 XP                Very intense
+                       Box Jumps                 Reps            10 reps      2 XP                Explosive power
 
-Functional Training    Squats                    Reps            reps         1 XP
-                       Lunges                    Reps            reps         1 XP
-                       Step-Ups                  Reps            reps         1 XP
-                       Medicine Ball Throws      Reps            reps         1 XP
-                       Kettlebell Swings         Reps            reps         1 XP
+Functional Training    Squats                    Reps            10 reps      1 XP                Compound movement
+                       Lunges                    Reps            10 reps      1 XP                Core + Legs
+                       Step-Ups                  Reps            10 reps      1 XP                Legs + Coordination
+                       Medicine Ball Throws      Reps            10 reps      1 XP                Core + Power
+                       Kettlebell Swings         Reps            10 reps      1 XP                Total body workout
+
+
+
 
