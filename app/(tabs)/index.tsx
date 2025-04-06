@@ -4,12 +4,13 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { auth, db } from '@/config/firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, DocumentReference, DocumentData } from 'firebase/firestore';
 import { WorkoutProgress, UserStats, calculateLevel } from '@/types/workout';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { FontAwesome } from '@expo/vector-icons';
+import { Link, router } from 'expo-router';
 
 interface DashboardStats {
   username: string;
@@ -139,6 +140,8 @@ export default function DashboardScreen() {
   const loadDashboardData = async () => {
     if (!auth.currentUser) return;
 
+    setLoading(true);
+    
     try {
       const today = new Date().toISOString().split('T')[0];
       const userRef = doc(db, 'users', auth.currentUser.uid);
@@ -162,6 +165,13 @@ export default function DashboardScreen() {
           },
           dailyWorkouts: [],
         });
+        
+        // Random chance (10%) to recalculate XP to ensure accuracy
+        const shouldRecalculate = Math.random() < 0.1;
+        
+        if (shouldRecalculate && progressDoc.exists()) {
+          await recalculateAllXP(progressDoc.data(), userRef, userData);
+        }
       }
 
       // Get all workouts from daily_workouts collection
@@ -210,6 +220,167 @@ export default function DashboardScreen() {
       console.error('Error loading dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Calculate XP from workout data and store in user document
+  const recalculateAllXP = async (
+    progressData: Record<string, any>, 
+    userRef: DocumentReference, 
+    userData: DocumentData
+  ) => {
+    // XP values for different workout types
+    const workoutXPValues: Record<string, number> = {
+      'Running': 10,
+      'Cycling': 8,
+      'Swimming': 12,
+      'Walking': 5,
+      'Weightlifting': 8,
+      'Yoga': 6,
+      'Push-ups': 7,
+      'Sit-ups': 7,
+      'Squats': 7,
+      'Planks': 8,
+      'Jumping Jacks': 6
+    };
+
+    try {
+      // Object to store XP by date
+      const dailyXP: Record<string, number> = userData.dailyXP || {};
+      let totalXP = 0;
+      
+      // Process each workout
+      Object.entries(progressData).forEach(([workoutName, dateEntries]) => {
+        // Skip non-object entries
+        if (typeof dateEntries !== 'object' || dateEntries === null) return;
+        
+        // Get XP value for this workout type (default to 5 if not found)
+        const baseXP = workoutXPValues[workoutName] || 5;
+        
+        // Process each date entry for this workout
+        Object.entries(dateEntries as Record<string, any>).forEach(([date, entry]) => {
+          // Skip if not a valid entry object
+          if (!entry || typeof entry !== 'object' || !entry.completed) return;
+          
+          // Initialize this date's XP if not exists
+          if (!dailyXP[date]) dailyXP[date] = 0;
+          
+          // Add XP for completed workout
+          dailyXP[date] += baseXP;
+        });
+      });
+      
+      // Cap daily XP at 100 for each day
+      Object.keys(dailyXP).forEach(date => {
+        if (dailyXP[date] > 100) dailyXP[date] = 100;
+      });
+      
+      // Calculate total XP by summing all daily XP
+      totalXP = Object.values(dailyXP).reduce((sum: number, xp: number) => sum + xp, 0);
+      
+      // Only update if XP values have changed
+      if (totalXP !== userData.totalXP || !isEqualDailyXP(dailyXP, userData.dailyXP)) {
+        console.log(`Updating XP: Total XP ${userData.totalXP} -> ${totalXP}`);
+        await updateDoc(userRef, {
+          totalXP,
+          dailyXP
+        });
+      }
+      
+      return { totalXP, dailyXP };
+    } catch (error) {
+      console.error("Error calculating XP:", error);
+      return { totalXP: userData.totalXP || 0, dailyXP: userData.dailyXP || {} };
+    }
+  };
+
+  // Helper function to compare dailyXP objects
+  const isEqualDailyXP = (obj1: Record<string, number> | undefined, obj2: Record<string, number> | undefined): boolean => {
+    if (!obj1 || !obj2) return false;
+    const keys1 = Object.keys(obj1);
+    const keys2 = Object.keys(obj2);
+    
+    if (keys1.length !== keys2.length) return false;
+    
+    return keys1.every(key => 
+      obj2.hasOwnProperty(key) && obj1[key] === obj2[key]
+    );
+  };
+
+  const updateXPAfterWorkoutChange = async () => {
+    if (!auth.currentUser) return;
+    
+    try {
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      
+      const [progressDoc, userDoc] = await Promise.all([
+        getDoc(progressRef),
+        getDoc(userRef)
+      ]);
+      
+      if (progressDoc.exists() && userDoc.exists()) {
+        await recalculateAllXP(progressDoc.data(), userRef, userDoc.data());
+      }
+    } catch (error) {
+      console.error('Error updating XP after workout change:', error);
+    }
+  };
+
+  const handleUpdateProgress = async () => {
+    if (!auth.currentUser || !stats || !editingWorkout || !progressValue) return;
+
+    try {
+      let value = parseFloat(progressValue);
+      if (isNaN(value)) return;
+
+      // Cap the value at targetValue if it exceeds it
+      if (value > editingWorkout.targetValue) {
+        value = editingWorkout.targetValue;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const timestamp = Date.now();
+      
+      // Get reference to user's progress document
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+      const progressDoc = await getDoc(progressRef);
+      
+      // Check if this update completes the workout
+      const isCompleted = value >= editingWorkout.targetValue;
+      
+      // Create new progress entry
+      const newProgress = {
+        value: value,
+        completed: isCompleted,
+        timestamp,
+        date: today,
+        unit: editingWorkout.unit
+      };
+      
+      // Update or create the progress document
+      if (progressDoc.exists()) {
+        await updateDoc(progressRef, {
+          [`${editingWorkout.name}.${today}`]: newProgress
+        });
+      } else {
+        await setDoc(progressRef, {
+          [editingWorkout.name]: {
+            [today]: newProgress
+          }
+        });
+      }
+
+      // Recalculate XP after workout change
+      await updateXPAfterWorkoutChange();
+      
+      // Reset state and reload data
+      setShowEditModal(false);
+      setProgressValue('');
+      setEditingWorkout(null);
+      await loadDashboardData();
+    } catch (error) {
+      console.error('Error updating progress:', error);
     }
   };
 
@@ -380,71 +551,6 @@ export default function DashboardScreen() {
     }
   };
 
-  const handleUpdateProgress = async () => {
-    if (!auth.currentUser || !stats || !editingWorkout || !progressValue) return;
-
-    try {
-      let value = parseFloat(progressValue);
-      if (isNaN(value)) return;
-
-      // Cap the value at targetValue if it exceeds it
-      if (value > editingWorkout.targetValue) {
-        value = editingWorkout.targetValue;
-      }
-
-      const today = new Date().toISOString().split('T')[0];
-      const timestamp = Date.now();
-      
-      // Get reference to user's progress document
-      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
-      const progressDoc = await getDoc(progressRef);
-      
-      // Check if this update completes the workout
-      const isCompleted = value >= editingWorkout.targetValue;
-      
-      // Create new progress entry
-      const newProgress = {
-        value: value,
-        completed: isCompleted,
-        timestamp,
-        date: today
-      };
-      
-      // Update or create the progress document
-      if (progressDoc.exists()) {
-        await updateDoc(progressRef, {
-          [`${editingWorkout.name}.${today}`]: newProgress
-        });
-      } else {
-        await setDoc(progressRef, {
-          [editingWorkout.name]: {
-            [today]: newProgress
-          }
-        });
-      }
-
-      // If completed, calculate and award XP
-      if (isCompleted && !editingWorkout.completed) {
-        const xpGained = calculateWorkoutXP({
-          ...editingWorkout,
-          currentValue: value,
-          completed: true
-        });
-
-        if (xpGained > 0) {
-          await updateUserXP(xpGained);
-        }
-      }
-      
-      await loadDashboardData();
-      setShowEditModal(false);
-      setProgressValue('');
-      setEditingWorkout(null);
-    } catch (error) {
-      console.error('Error updating progress:', error);
-    }
-  };
-
   const handleCompleteWorkout = async (workout: WorkoutProgress) => {
     if (!auth.currentUser || !stats) return;
 
@@ -461,7 +567,8 @@ export default function DashboardScreen() {
         value: workout.targetValue,
         completed: true,
         timestamp,
-        date: today
+        date: today,
+        unit: workout.unit // Store the unit for accurate XP calculation
       };
       
       // Update or create the progress document
@@ -479,22 +586,8 @@ export default function DashboardScreen() {
         });
       }
 
-      // Calculate and award XP if not already completed
-      if (!workout.completed) {
-        // Update the workout object with today's date to ensure XP is tracked correctly
-        const updatedWorkout = {
-          ...workout,
-          currentValue: workout.targetValue,
-          completed: true,
-          date: today // Ensure the date is today when completing the workout
-        };
-
-        const xpGained = calculateWorkoutXP(updatedWorkout);
-
-        if (xpGained > 0) {
-          await updateUserXP(xpGained);
-        }
-      }
+      // Recalculate XP after workout change
+      await updateXPAfterWorkoutChange();
       
       // Reload dashboard data
       await loadDashboardData();
@@ -514,12 +607,6 @@ export default function DashboardScreen() {
       
       // Get reference to user's progress document and user document
       const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
-      const userRef = doc(db, 'users', auth.currentUser.uid);
-      
-      const [progressDoc, userDoc] = await Promise.all([
-        getDoc(progressRef),
-        getDoc(userRef)
-      ]);
       
       // Only reset workouts from today
       if (workout.date !== today) {
@@ -532,80 +619,17 @@ export default function DashboardScreen() {
         value: 0,
         completed: false,
         timestamp,
-        date: today
+        date: today,
+        unit: workout.unit
       };
       
-      // Update or create the progress document
-      if (progressDoc.exists()) {
-        console.log("Updating progress document to reset workout");
-        await updateDoc(progressRef, {
-          [`${workout.name}.${today}`]: resetProgress
-        });
-      } else {
-        console.log("Creating new progress document with reset workout");
-        await setDoc(progressRef, {
-          [workout.name]: {
-            [today]: resetProgress
-          }
-        });
-      }
+      // Update progress document
+      await updateDoc(progressRef, {
+        [`${workout.name}.${today}`]: resetProgress
+      });
       
-      // Only subtract XP if the workout was previously completed
-      if (workout.completed && userDoc.exists()) {
-        // Calculate how much XP was earned from this workout
-        const workoutXP = calculateWorkoutXP(workout);
-        console.log("Workout was completed, subtracting XP:", workoutXP);
-        
-        const userData = userDoc.data();
-        
-        // Get dailyXP map for all days
-        const dailyXP = userData.dailyXP || {};
-        
-        // Make sure it's for today's workout
-        if (dailyXP[today] !== undefined) {
-          // Update only today's XP - ensure it doesn't go below 0
-          const updatedDailyXP = {
-            ...dailyXP,
-            [today]: Math.max(0, dailyXP[today] - workoutXP)
-          };
-          
-          // Calculate the new total XP as sum of all dailyXP values
-          let totalXP = 0;
-          Object.values(updatedDailyXP).forEach(xp => {
-            totalXP += (typeof xp === 'number') ? xp : 0;
-          });
-          
-          const levelData = calculateLevel(totalXP);
-          
-          console.log("Updating user document with new XP totals:", {
-            oldDailyXP: dailyXP[today],
-            newDailyXP: updatedDailyXP[today],
-            newTotalXP: totalXP
-          });
-          
-          // Update the user document with reduced XP
-          await updateDoc(userRef, {
-            totalXP: totalXP,
-            dailyXP: updatedDailyXP
-          });
-          
-          // Update local state with new XP totals
-          setStats(prev => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              stats: {
-                totalXP: totalXP,
-                ...levelData,
-              }
-            };
-          });
-        } else {
-          console.log(`Cannot adjust XP: no XP record for today (${today})`);
-        }
-      } else {
-        console.log("Workout was not completed, no XP to subtract");
-      }
+      // Recalculate XP after workout change
+      await updateXPAfterWorkoutChange();
       
       // Reload dashboard data
       await loadDashboardData();
@@ -969,10 +993,10 @@ export default function DashboardScreen() {
             <View style={styles.xpInfoContainer}>
               <ThemedText style={[styles.xpText, { color: currentTheme.colors.accent }]}>
                 {stats.stats.currentLevelXP} / {stats.stats.xpForNextLevel} XP
-        </ThemedText>
+              </ThemedText>
               <ThemedText style={[styles.xpNeeded, { color: currentTheme.colors.accent }]}>
                 {stats.stats.xpForNextLevel - stats.stats.currentLevelXP} XP needed for Level {stats.stats.level + 1}
-        </ThemedText>
+              </ThemedText>
             </View>
           </View>
 
@@ -982,7 +1006,7 @@ export default function DashboardScreen() {
               <MaterialCommunityIcons name="dumbbell" size={24} color={currentTheme.colors.accent} />
               <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
                 Daily Workouts
-        </ThemedText>
+              </ThemedText>
             </View>
             <ScrollView 
               style={styles.workoutsScrollView} 
@@ -992,7 +1016,7 @@ export default function DashboardScreen() {
               {renderDailyWorkouts()}
             </ScrollView>
           </View>
-      </ThemedView>
+        </ThemedView>
       </ScrollView>
 
       {/* Edit Progress Modal */}
