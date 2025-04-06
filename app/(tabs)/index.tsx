@@ -757,10 +757,10 @@ export default function DashboardScreen() {
             <View style={styles.xpInfoContainer}>
               <ThemedText style={[styles.xpText, { color: currentTheme.colors.accent }]}>
                 {stats.stats.currentLevelXP} / {stats.stats.xpForNextLevel} XP
-              </ThemedText>
+        </ThemedText>
               <ThemedText style={[styles.xpNeeded, { color: currentTheme.colors.accent }]}>
                 {stats.stats.xpForNextLevel - stats.stats.currentLevelXP} XP needed for Level {stats.stats.level + 1}
-              </ThemedText>
+        </ThemedText>
             </View>
           </View>
 
@@ -770,7 +770,7 @@ export default function DashboardScreen() {
               <MaterialCommunityIcons name="dumbbell" size={24} color={currentTheme.colors.accent} />
               <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
                 Daily Workouts
-              </ThemedText>
+        </ThemedText>
             </View>
             <ScrollView 
               style={styles.workoutsScrollView} 
@@ -780,7 +780,7 @@ export default function DashboardScreen() {
               {renderDailyWorkouts()}
             </ScrollView>
           </View>
-        </ThemedView>
+      </ThemedView>
       </ScrollView>
 
       {/* Edit Progress Modal */}

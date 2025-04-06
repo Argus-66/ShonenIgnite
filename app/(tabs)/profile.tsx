@@ -322,6 +322,23 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: '#4F9DDE'
   },
+  workoutItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  workoutItemIcon: {
+    backgroundColor: 'rgba(79, 157, 222, 0.1)',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  workoutItemDetails: {
+    marginLeft: 44, // To align with the icon + text above
+  },
   detailCard: {
     alignItems: 'center',
     padding: 12,
@@ -438,6 +455,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+  loadingState: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
 
 export default function ProfileScreen() {
@@ -452,6 +474,7 @@ export default function ProfileScreen() {
   const [workoutData, setWorkoutData] = useState<{ [date: string]: number }>({});
   const [maxWorkouts, setMaxWorkouts] = useState(0);
   const [selectedDay, setSelectedDay] = useState<{ date: string; count: number } | null>(null);
+  const [dayWorkouts, setDayWorkouts] = useState<any[]>([]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -665,9 +688,76 @@ export default function ProfileScreen() {
     setSelectedMonth(newDate);
   };
 
-  const handleDayPress = (date: string, count: number) => {
+  const handleDayPress = async (date: string, count: number) => {
     setSelectedDay({ date, count });
-    console.log(`Selected day: ${date}, workout count: ${count}`);
+    
+    // Fetch workouts for the selected date
+    if (count > 0) {
+      await loadWorkoutsForDate(date);
+    }
+  };
+
+  const loadWorkoutsForDate = async (date: string) => {
+    if (!auth.currentUser) return;
+
+    try {
+      const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
+      const userWorkoutsDoc = await getDoc(userWorkoutsRef);
+      
+      if (userWorkoutsDoc.exists()) {
+        const data = userWorkoutsDoc.data();
+        const workouts = data.workouts || [];
+        
+        // Filter workouts for the selected date
+        const selectedDateWorkouts = workouts.filter((w: any) => w.date === date);
+        
+        // Calculate calories for each workout (this is a simple approximation)
+        const workoutsWithCalories = selectedDateWorkouts.map((workout: any) => {
+          let calories = 0;
+          
+          // Simple calories calculation based on workout type and duration/distance
+          // These are rough estimates and could be improved with more accurate formulas
+          if (workout.unit === 'minutes') {
+            // Time-based workouts: roughly 5-10 calories per minute depending on intensity
+            if (workout.name.includes('Running')) {
+              calories = Math.round(workout.value * 10); // Higher intensity
+            } else if (workout.name.includes('Cycling')) {
+              calories = Math.round(workout.value * 8);
+            } else if (workout.name.includes('Walking')) {
+              calories = Math.round(workout.value * 5); // Lower intensity
+            } else if (workout.name.includes('Strength') || workout.name.includes('Weight')) {
+              calories = Math.round(workout.value * 7);
+            } else {
+              calories = Math.round(workout.value * 6); // Default for time-based
+            }
+          } else if (workout.unit === 'km') {
+            // Distance-based workouts
+            if (workout.name.includes('Running')) {
+              calories = Math.round(workout.value * 70); // ~70 calories per km running
+            } else if (workout.name.includes('Cycling')) {
+              calories = Math.round(workout.value * 40); // ~40 calories per km cycling
+            } else if (workout.name.includes('Walking')) {
+              calories = Math.round(workout.value * 50); // ~50 calories per km walking
+            } else {
+              calories = Math.round(workout.value * 60); // Default
+            }
+          } else if (workout.unit === 'reps') {
+            // Rep-based workouts: roughly 0.5 calories per rep for most exercises
+            calories = Math.round(workout.value * 0.5);
+          }
+          
+          return {
+            ...workout,
+            calories
+          };
+        });
+        
+        setDayWorkouts(workoutsWithCalories);
+      }
+    } catch (error) {
+      console.error('Error loading workouts for date:', error);
+      setDayWorkouts([]);
+    }
   };
 
   // Helper function to format date for the modal title
@@ -945,19 +1035,39 @@ export default function ProfileScreen() {
                     </View>
                     
                     {selectedDay.count > 0 ? (
-                      // Here you'd normally fetch workouts for this day and display them
-                      // For now, we'll show placeholders
-                      Array(selectedDay.count).fill(0).map((_, index) => (
-                        <View key={index} style={styles.workoutItem}>
-                          <ThemedText style={{ fontSize: 16, fontWeight: 'bold' }}>Workout {index + 1}</ThemedText>
-                          <ThemedText style={{ fontSize: 14, marginTop: 4 }}>
-                            {index % 2 === 0 ? "Strength Training" : "Cardio"}
-                          </ThemedText>
-                          <ThemedText style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-                            {45 + index * 10} minutes • {index % 2 === 0 ? "220 calories" : "350 calories"}
-                          </ThemedText>
+                      dayWorkouts.length > 0 ? (
+                        dayWorkouts.map((workout, index) => (
+                          <View key={`day-workout-${workout.name}-${workout.timestamp}`} 
+                            style={[styles.workoutItem, { 
+                              backgroundColor: `${currentTheme.colors.card}30`,
+                              borderLeftColor: currentTheme.colors.accent 
+                            }]}
+                          >
+                            <View style={styles.workoutItemHeader}>
+                              <View style={[styles.workoutItemIcon, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
+                                <MaterialCommunityIcons 
+                                  name={workout.icon || "dumbbell"} 
+                                  size={20} 
+                                  color={currentTheme.colors.accent} 
+                                />
+                              </View>
+                              <ThemedText style={{ fontSize: 16, fontWeight: 'bold' }}>{workout.name}</ThemedText>
+                            </View>
+                            <View style={styles.workoutItemDetails}>
+                              <ThemedText style={{ fontSize: 14 }}>
+                                {workout.value} {workout.unit}
+                              </ThemedText>
+                              <ThemedText style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>
+                                {workout.calories} calories
+                              </ThemedText>
+                            </View>
+                          </View>
+                        ))
+                      ) : (
+                        <View style={styles.loadingState}>
+                          <ThemedText>Loading workouts...</ThemedText>
                         </View>
-                      ))
+                      )
                     ) : (
                       <View style={styles.emptyState}>
                         <MaterialCommunityIcons name="dumbbell" size={48} color={`${currentTheme.colors.text}50`} />

@@ -238,7 +238,7 @@ export default function WorkoutsScreen() {
   const renderWorkoutItem = (exercise: Exercise) => {
     return (
       <View
-        key={exercise.timestamp}
+        key={`workout-${exercise.name}-${exercise.timestamp}`}
         style={[styles.workoutItem, {
           backgroundColor: `${currentTheme.colors.accent}15`,
           borderColor: currentTheme.colors.accent,
