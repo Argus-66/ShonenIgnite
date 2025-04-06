@@ -166,10 +166,9 @@ export default function DashboardScreen() {
           dailyWorkouts: [],
         });
         
-        // Random chance (10%) to recalculate XP to ensure accuracy
-        const shouldRecalculate = Math.random() < 0.1;
-        
-        if (shouldRecalculate && progressDoc.exists()) {
+        // Always recalculate XP to ensure accuracy
+        if (progressDoc.exists()) {
+          console.log("Recalculating XP on dashboard load...");
           await recalculateAllXP(progressDoc.data(), userRef, userData);
         }
       }
@@ -229,7 +228,7 @@ export default function DashboardScreen() {
     userRef: DocumentReference, 
     userData: DocumentData
   ) => {
-    // XP values for different workout types
+    // XP values for different workout types - each completed workout gives a fixed XP amount
     const workoutXPValues: Record<string, number> = {
       'Running': 10,
       'Cycling': 8,
@@ -245,46 +244,94 @@ export default function DashboardScreen() {
     };
 
     try {
-      // Object to store XP by date
-      const dailyXP: Record<string, number> = userData.dailyXP || {};
-      let totalXP = 0;
+      // Start with a clean dailyXP object or use existing one
+      const dailyXP: Record<string, number> = userData.dailyXP ? { ...userData.dailyXP } : {};
       
-      // Process each workout
+      // Track dates we're processing for logging purposes
+      const datesProcessed = new Set<string>();
+      
+      // First, reset XP for all dates found in our current progress data
+      // This ensures we're not carrying over stale values
       Object.entries(progressData).forEach(([workoutName, dateEntries]) => {
-        // Skip non-object entries
         if (typeof dateEntries !== 'object' || dateEntries === null) return;
         
-        // Get XP value for this workout type (default to 5 if not found)
+        Object.keys(dateEntries).forEach(date => {
+          // Track this date for processing
+          datesProcessed.add(date);
+          
+          // Reset XP for this date - we'll recalculate it
+          dailyXP[date] = 0;
+        });
+      });
+      
+      console.log(`Recalculating XP for ${datesProcessed.size} dates: ${Array.from(datesProcessed).join(', ')}`);
+      
+      // Now calculate XP for each workout and date
+      Object.entries(progressData).forEach(([workoutName, dateEntries]) => {
+        if (typeof dateEntries !== 'object' || dateEntries === null) {
+          console.log(`Skipping invalid workout: ${workoutName} (not an object)`);
+          return;
+        }
+        
+        // Get XP value for this workout type
         const baseXP = workoutXPValues[workoutName] || 5;
+        console.log(`Processing workout: ${workoutName} (base XP: ${baseXP})`);
         
         // Process each date entry for this workout
-        Object.entries(dateEntries as Record<string, any>).forEach(([date, entry]) => {
-          // Skip if not a valid entry object
-          if (!entry || typeof entry !== 'object' || !entry.completed) return;
+        Object.entries(dateEntries).forEach(([date, entry]) => {
+          // Skip if entry is not valid or not completed
+          if (!entry || typeof entry !== 'object') {
+            console.log(`Skipping invalid entry for ${workoutName} on ${date}`);
+            return;
+          }
+          
+          // Strict check for completed=true (not just truthy)
+          if ((entry as any).completed !== true) {
+            console.log(`Skipping non-completed workout: ${workoutName} on ${date}`);
+            return;
+          }
           
           // Initialize this date's XP if not exists
           if (!dailyXP[date]) dailyXP[date] = 0;
           
           // Add XP for completed workout
           dailyXP[date] += baseXP;
+          console.log(`Added ${baseXP} XP for ${workoutName} on ${date}, total for day: ${dailyXP[date]}`);
         });
       });
       
       // Cap daily XP at 100 for each day
       Object.keys(dailyXP).forEach(date => {
-        if (dailyXP[date] > 100) dailyXP[date] = 100;
+        if (dailyXP[date] > 100) {
+          console.log(`Capping XP for ${date} at 100 (was ${dailyXP[date]})`);
+          dailyXP[date] = 100;
+        }
+        
+        // Ensure XP is a number (convert any non-numeric values)
+        if (typeof dailyXP[date] !== 'number') {
+          console.log(`Converting non-numeric XP value for ${date}: ${dailyXP[date]} to 0`);
+          dailyXP[date] = 0;
+        }
       });
       
       // Calculate total XP by summing all daily XP
-      totalXP = Object.values(dailyXP).reduce((sum: number, xp: number) => sum + xp, 0);
+      const totalXP = Object.values(dailyXP).reduce((sum: number, xp: number) => {
+        // Ensure we're only adding numbers
+        return sum + (typeof xp === 'number' ? xp : 0);
+      }, 0);
+      
+      console.log('Final dailyXP:', dailyXP);
+      console.log(`Final totalXP: ${totalXP}`);
       
       // Only update if XP values have changed
       if (totalXP !== userData.totalXP || !isEqualDailyXP(dailyXP, userData.dailyXP)) {
-        console.log(`Updating XP: Total XP ${userData.totalXP} -> ${totalXP}`);
+        console.log(`Updating XP in database: Total XP ${userData.totalXP} -> ${totalXP}`);
         await updateDoc(userRef, {
           totalXP,
           dailyXP
         });
+      } else {
+        console.log("XP values unchanged, not updating database");
       }
       
       return { totalXP, dailyXP };
@@ -296,21 +343,36 @@ export default function DashboardScreen() {
 
   // Helper function to compare dailyXP objects
   const isEqualDailyXP = (obj1: Record<string, number> | undefined, obj2: Record<string, number> | undefined): boolean => {
+    // If either object is undefined, they're different
     if (!obj1 || !obj2) return false;
+    
     const keys1 = Object.keys(obj1);
     const keys2 = Object.keys(obj2);
     
-    if (keys1.length !== keys2.length) return false;
+    // If they have different number of dates, they're different
+    if (keys1.length !== keys2.length) {
+      console.log("dailyXP objects have different number of keys");
+      return false;
+    }
     
-    return keys1.every(key => 
-      obj2.hasOwnProperty(key) && obj1[key] === obj2[key]
-    );
+    // Check that all keys exist in both objects with the same values
+    for (const key of keys1) {
+      if (!obj2.hasOwnProperty(key) || obj1[key] !== obj2[key]) {
+        console.log(`Difference in dailyXP for date ${key}: ${obj1[key]} vs ${obj2[key]}`);
+        return false;
+      }
+    }
+    
+    // If we got here, the objects are identical
+    return true;
   };
 
   const updateXPAfterWorkoutChange = async () => {
     if (!auth.currentUser) return;
     
     try {
+      console.log("Updating XP after workout change...");
+      
       const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
       const userRef = doc(db, 'users', auth.currentUser.uid);
       
@@ -320,7 +382,11 @@ export default function DashboardScreen() {
       ]);
       
       if (progressDoc.exists() && userDoc.exists()) {
-        await recalculateAllXP(progressDoc.data(), userRef, userDoc.data());
+        console.log("Found progress and user documents, recalculating XP...");
+        const result = await recalculateAllXP(progressDoc.data(), userRef, userDoc.data());
+        console.log(`XP recalculation complete. New total XP: ${result.totalXP}`);
+      } else {
+        console.log("Missing required documents for XP calculation");
       }
     } catch (error) {
       console.error('Error updating XP after workout change:', error);
@@ -558,6 +624,8 @@ export default function DashboardScreen() {
       const today = new Date().toISOString().split('T')[0];
       const timestamp = Date.now();
       
+      console.log(`Completing workout: ${workout.name} for today (${today})`);
+      
       // Get reference to user's progress document
       const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
       const progressDoc = await getDoc(progressRef);
@@ -577,6 +645,7 @@ export default function DashboardScreen() {
         await updateDoc(progressRef, {
           [`${workout.name}.${today}`]: newProgress
         });
+        console.log(`Updated progress for ${workout.name} to completed with value ${workout.targetValue} ${workout.unit}`);
       } else {
         // Create new document with initial progress
         await setDoc(progressRef, {
@@ -584,6 +653,7 @@ export default function DashboardScreen() {
             [today]: newProgress
           }
         });
+        console.log(`Created new progress document for ${workout.name}`);
       }
 
       // Recalculate XP after workout change
@@ -628,6 +698,8 @@ export default function DashboardScreen() {
         [`${workout.name}.${today}`]: resetProgress
       });
       
+      console.log(`Reset workout: ${workout.name} completed status to false`);
+      
       // Recalculate XP after workout change
       await updateXPAfterWorkoutChange();
       
@@ -645,31 +717,60 @@ export default function DashboardScreen() {
       const today = new Date().toISOString().split('T')[0];
       const timestamp = Date.now();
       
-      const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
-      const userWorkoutsDoc = await getDoc(userWorkoutsRef);
+      console.log("Starting complete all workouts process for today:", today);
       
-      if (userWorkoutsDoc.exists()) {
-        const data = userWorkoutsDoc.data();
-        const allWorkouts = data.workouts || [];
-        
-        // Convert all workouts to Exercise format for storage
-        const newWorkouts = stats.dailyWorkouts.map(workout => ({
-          name: workout.name,
-          icon: workout.icon,
-          metric: workout.metric,
-          unit: workout.unit,
+      // Get progress document reference
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+      const progressDoc = await getDoc(progressRef);
+      
+      // Prepare batch updates for progress document
+      const progressUpdates: Record<string, any> = {};
+      
+      // Mark each workout as completed with target value
+      stats.dailyWorkouts.forEach(workout => {
+        // Create completed entry for this workout
+        const newProgress = {
           value: workout.targetValue,
+          completed: true,
           timestamp,
           date: today,
-        }));
+          unit: workout.unit
+        };
         
-        await updateDoc(userWorkoutsRef, {
-          workouts: [...allWorkouts, ...newWorkouts]
+        // Add to updates
+        progressUpdates[`${workout.name}.${today}`] = newProgress;
+        console.log(`Marking ${workout.name} as completed with value ${workout.targetValue} ${workout.unit}`);
+      });
+      
+      // Update or create the progress document
+      if (progressDoc.exists()) {
+        await updateDoc(progressRef, progressUpdates);
+      } else {
+        // Build document structure if it doesn't exist
+        const initialData: Record<string, any> = {};
+        
+        stats.dailyWorkouts.forEach(workout => {
+          initialData[workout.name] = {
+            [today]: {
+              value: workout.targetValue,
+              completed: true,
+              timestamp,
+              date: today,
+              unit: workout.unit
+            }
+          };
         });
         
-        // Reload dashboard data
-        await loadDashboardData();
+        await setDoc(progressRef, initialData);
       }
+      
+      console.log("All workouts marked as completed");
+      
+      // Recalculate XP after workout change
+      await updateXPAfterWorkoutChange();
+      
+      // Reload dashboard data
+      await loadDashboardData();
     } catch (error) {
       console.error('Error completing all workouts:', error);
     }
