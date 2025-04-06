@@ -826,7 +826,10 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
+    <SafeAreaView style={[styles.safeArea, { 
+      backgroundColor: currentTheme.colors.background,
+      paddingTop: 8 
+    }]}>
       <StatusBar
         barStyle={isColorDark(currentTheme.colors.background) ? "light-content" : "dark-content"}
         backgroundColor={currentTheme.colors.background}

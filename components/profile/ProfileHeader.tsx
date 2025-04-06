@@ -17,7 +17,7 @@ export const ProfileHeader = ({ username, onEditPress, onLogoutPress }: ProfileH
       backgroundColor: `${currentTheme.colors.accent}15`,
       borderRadius: 16,
       marginHorizontal: 16,
-      marginTop: 12
+      marginTop: 40
     }]}>
       <View style={styles.headerLeft}>
         <View style={[styles.avatarContainer, { 

@@ -307,7 +307,12 @@ export default function WorkoutsScreen() {
             
             <View style={styles.workoutsList}>
               {todayWorkouts.length > 0 ? (
-                todayWorkouts.map(renderWorkoutItem)
+                <ScrollView 
+                  style={styles.workoutsScroll}
+                  showsVerticalScrollIndicator={true}
+                >
+                  {todayWorkouts.map(renderWorkoutItem)}
+                </ScrollView>
               ) : (
                 <View style={styles.emptyState}>
                   <MaterialCommunityIcons
@@ -499,12 +504,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+    paddingTop: 8,
   },
   section: {
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 16,
     padding: 16,
+    marginTop: 0,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -517,8 +524,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   workoutsList: {
-    flex: 1,
     marginBottom: 16,
+    height: 340,
+  },
+  workoutsScroll: {
+    flex: 1,
   },
   workoutItem: {
     flexDirection: 'row',
@@ -528,7 +538,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 12,
-    minHeight: 88, // Ensure consistent height
+    minHeight: 88,
   },
   workoutItemLeft: {
     flexDirection: 'row',

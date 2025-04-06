@@ -16,17 +16,30 @@ interface DashboardStats {
   coins: number;
   stats: UserStats;
   dailyWorkouts: WorkoutProgress[];
+  dailyCalories?: { [date: string]: number };
 }
 
-interface WorkoutProgress {
-  value: number;
+// This should match what's in types/workout.ts
+interface LocalWorkoutProgress {
+  workoutId: string;
+  name: string;
+  icon: string;
+  metric: string;
+  unit: string;
+  targetValue: number;
+  currentValue: number;
   completed: boolean;
-  timestamp: number;
   date: string;
+  timestamp: number;
 }
 
 interface DailyProgress {
-  [date: string]: WorkoutProgress;
+  [date: string]: {
+    value: number;
+    completed: boolean;
+    timestamp: number;
+    date: string;
+  };
 }
 
 interface ProgressData {
@@ -85,8 +98,10 @@ export default function DashboardScreen() {
   const [progressValue, setProgressValue] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [showXPLimitToast, setShowXPLimitToast] = useState(false);
   const celebrationOpacity = useState(new Animated.Value(0))[0];
   const celebrationScale = useState(new Animated.Value(0.3))[0];
+  const xpLimitToastOpacity = useState(new Animated.Value(0))[0];
   const confettiAnimations = useState([...Array(20)].map(() => ({
     position: new Animated.ValueXY({ x: 0, y: 0 }),
     opacity: new Animated.Value(1),
@@ -99,6 +114,27 @@ export default function DashboardScreen() {
     // Clean up incomplete workouts from previous days
     cleanupIncompleteWorkouts();
   }, []);
+
+  useEffect(() => {
+    if (showXPLimitToast) {
+      // Animate toast in
+      Animated.sequence([
+        Animated.timing(xpLimitToastOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.delay(3000),
+        Animated.timing(xpLimitToastOpacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setShowXPLimitToast(false);
+      });
+    }
+  }, [showXPLimitToast]);
 
   const loadDashboardData = async () => {
     if (!auth.currentUser) return;
@@ -157,7 +193,8 @@ export default function DashboardScreen() {
             currentValue: todayProgress?.value || 0,
             completed: todayProgress?.completed || false,
             timestamp: workout.timestamp,
-            date: workout.date
+            date: workout.date,
+            workoutId: workout.name.toLowerCase().replace(/\s+/g, '-') // Generate workoutId from name
           };
         });
 
@@ -229,8 +266,43 @@ export default function DashboardScreen() {
 
     let xp = 0;
     if (workout.unit === xpRate.unit) {
+      // Calculate base XP from workout metrics
       xp = workout.currentValue * xpRate.xpPerUnit;
+      
+      // Calculate calories based on workout type and value
+      let calories = 0;
+      if (workout.unit === 'minutes') {
+        if (workout.name.toLowerCase().includes('running')) {
+          calories = Math.round(workout.currentValue * 10); // Higher intensity
+        } else if (workout.name.toLowerCase().includes('cycling')) {
+          calories = Math.round(workout.currentValue * 8);
+        } else if (workout.name.toLowerCase().includes('walking')) {
+          calories = Math.round(workout.currentValue * 5); // Lower intensity
+        } else if (workout.name.toLowerCase().includes('strength') || 
+                  workout.name.toLowerCase().includes('weight')) {
+          calories = Math.round(workout.currentValue * 7);
+        } else {
+          calories = Math.round(workout.currentValue * 6); // Default for time-based
+        }
+      } else if (workout.unit === 'km') {
+        if (workout.name.toLowerCase().includes('running')) {
+          calories = Math.round(workout.currentValue * 70); // ~70 calories per km running
+        } else if (workout.name.toLowerCase().includes('cycling')) {
+          calories = Math.round(workout.currentValue * 40); // ~40 calories per km cycling
+        } else if (workout.name.toLowerCase().includes('walking')) {
+          calories = Math.round(workout.currentValue * 50); // ~50 calories per km walking
+        } else {
+          calories = Math.round(workout.currentValue * 60); // Default
+        }
+      } else if (workout.unit === 'reps') {
+        calories = Math.round(workout.currentValue * 0.5); // Rep-based workouts
+      }
+      
+      // We'll use calories as the basis for XP calculation (1 calorie = 1 XP)
+      // But the actual limiting will happen in updateUserXP
+      xp = calories;
     }
+    
     return Math.floor(xp); // Round down to nearest integer
   };
 
@@ -238,14 +310,45 @@ export default function DashboardScreen() {
     if (!auth.currentUser || !stats) return;
 
     try {
+      const today = new Date().toISOString().split('T')[0];
       const userRef = doc(db, 'users', auth.currentUser.uid);
-      const currentTotalXP = stats.stats.totalXP + newXP;
+      const userDoc = await getDoc(userRef);
+      
+      if (!userDoc.exists()) {
+        console.error("User document not found");
+        return;
+      }
+      
+      const userData = userDoc.data();
+      const dailyXP = userData.dailyXP || {};
+      const todayXP = dailyXP[today] || 0;
+      
+      // Calculate how much more XP the user can earn today (cap at 100)
+      const maxAdditionalXP = Math.max(0, 100 - todayXP);
+      
+      // Limit the new XP to the maximum allowed for today
+      const limitedNewXP = Math.min(newXP, maxAdditionalXP);
+      
+      // If there's no more XP to be gained today, return early
+      if (limitedNewXP <= 0) return;
+      
+      // Update the total XP with the limited amount
+      const currentTotalXP = stats.stats.totalXP + limitedNewXP;
       const levelData = calculateLevel(currentTotalXP);
+      
+      // Update the daily XP tracking
+      const updatedDailyXP = {
+        ...dailyXP,
+        [today]: todayXP + limitedNewXP
+      };
 
+      // Update the user document
       await updateDoc(userRef, {
         totalXP: currentTotalXP,
+        dailyXP: updatedDailyXP,
       });
 
+      // Update local state
       setStats(prev => prev ? {
         ...prev,
         stats: {
@@ -253,6 +356,12 @@ export default function DashboardScreen() {
           ...levelData,
         },
       } : null);
+      
+      // If the user hit their daily limit, provide feedback
+      if (todayXP + limitedNewXP >= 100) {
+        console.log("Daily XP limit of 100 reached!");
+        setShowXPLimitToast(true);
+      }
     } catch (error) {
       console.error('Error updating user XP:', error);
     }
@@ -384,9 +493,16 @@ export default function DashboardScreen() {
       const today = new Date().toISOString().split('T')[0];
       const timestamp = Date.now();
       
-      // Get reference to user's progress document
+      console.log("Resetting workout:", workout.name, "Completed status:", workout.completed);
+      
+      // Get reference to user's progress document and user document
       const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
-      const progressDoc = await getDoc(progressRef);
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      
+      const [progressDoc, userDoc] = await Promise.all([
+        getDoc(progressRef),
+        getDoc(userRef)
+      ]);
       
       // Create new progress entry with reset values
       const resetProgress = {
@@ -398,15 +514,66 @@ export default function DashboardScreen() {
       
       // Update or create the progress document
       if (progressDoc.exists()) {
+        console.log("Updating progress document to reset workout");
         await updateDoc(progressRef, {
           [`${workout.name}.${today}`]: resetProgress
         });
       } else {
+        console.log("Creating new progress document with reset workout");
         await setDoc(progressRef, {
           [workout.name]: {
             [today]: resetProgress
           }
         });
+      }
+      
+      // Only subtract XP if the workout was previously completed
+      if (workout.completed && userDoc.exists()) {
+        // Calculate how much XP was earned from this workout
+        const workoutXP = calculateWorkoutXP(workout);
+        console.log("Workout was completed, subtracting XP:", workoutXP);
+        
+        const userData = userDoc.data();
+        const currentTotalXP = userData.totalXP || 0;
+        const dailyXP = userData.dailyXP || {};
+        const todayXP = dailyXP[today] || 0;
+        
+        // Calculate the new total XP after removing this workout's contribution
+        const newTotalXP = Math.max(0, currentTotalXP - workoutXP);
+        const levelData = calculateLevel(newTotalXP);
+        
+        // Update daily XP tracking - ensure it doesn't go below 0
+        const updatedDailyXP = {
+          ...dailyXP,
+          [today]: Math.max(0, todayXP - workoutXP)
+        };
+        
+        console.log("Updating user document with new XP totals:", {
+          oldTotal: currentTotalXP,
+          newTotal: newTotalXP,
+          dailyXPBefore: todayXP,
+          dailyXPAfter: updatedDailyXP[today]
+        });
+        
+        // Update the user document with reduced XP
+        await updateDoc(userRef, {
+          totalXP: newTotalXP,
+          dailyXP: updatedDailyXP,
+        });
+        
+        // Update local state with new XP totals
+        setStats(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            stats: {
+              totalXP: newTotalXP,
+              ...levelData,
+            }
+          };
+        });
+      } else {
+        console.log("Workout was not completed, no XP to subtract");
       }
       
       // Reload dashboard data
@@ -538,6 +705,19 @@ export default function DashboardScreen() {
       <View style={styles.celebrationContainer}>
         <Text style={styles.celebrationText}>Completed!</Text>
       </View>
+    );
+  };
+
+  const renderXPLimitToast = () => {
+    if (!showXPLimitToast) return null;
+    
+    return (
+      <Animated.View style={[styles.toastContainer, { opacity: xpLimitToastOpacity }]}>
+        <View style={[styles.toast, { backgroundColor: currentTheme.colors.accent }]}>
+          <MaterialCommunityIcons name="alert-circle" size={24} color="#fff" />
+          <Text style={styles.toastText}>Daily XP limit reached! Come back tomorrow for more.</Text>
+        </View>
+      </Animated.View>
     );
   };
 
@@ -697,6 +877,7 @@ export default function DashboardScreen() {
         barStyle="light-content"
         backgroundColor={currentTheme.colors.background}
       />
+      {renderXPLimitToast()}
       <ScrollView 
         style={styles.mainScrollView}
         showsVerticalScrollIndicator={false}
@@ -757,10 +938,10 @@ export default function DashboardScreen() {
             <View style={styles.xpInfoContainer}>
               <ThemedText style={[styles.xpText, { color: currentTheme.colors.accent }]}>
                 {stats.stats.currentLevelXP} / {stats.stats.xpForNextLevel} XP
-        </ThemedText>
+              </ThemedText>
               <ThemedText style={[styles.xpNeeded, { color: currentTheme.colors.accent }]}>
                 {stats.stats.xpForNextLevel - stats.stats.currentLevelXP} XP needed for Level {stats.stats.level + 1}
-        </ThemedText>
+              </ThemedText>
             </View>
           </View>
 
@@ -770,7 +951,7 @@ export default function DashboardScreen() {
               <MaterialCommunityIcons name="dumbbell" size={24} color={currentTheme.colors.accent} />
               <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
                 Daily Workouts
-        </ThemedText>
+              </ThemedText>
             </View>
             <ScrollView 
               style={styles.workoutsScrollView} 
@@ -780,7 +961,7 @@ export default function DashboardScreen() {
               {renderDailyWorkouts()}
             </ScrollView>
           </View>
-      </ThemedView>
+        </ThemedView>
       </ScrollView>
 
       {/* Edit Progress Modal */}
@@ -1029,5 +1210,33 @@ const styles = StyleSheet.create({
   },
   mainScrollView: {
     flex: 1,
+  },
+  toastContainer: {
+    position: 'absolute',
+    top: 60,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    padding: 16,
+  },
+  toast: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    maxWidth: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  toastText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    marginLeft: 8,
+    flexShrink: 1,
   },
 });
