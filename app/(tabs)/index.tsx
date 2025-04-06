@@ -192,8 +192,8 @@ export default function DashboardScreen() {
             targetValue: workout.value,
             currentValue: todayProgress?.value || 0,
             completed: todayProgress?.completed || false,
-            timestamp: workout.timestamp,
-            date: workout.date,
+            timestamp: todayProgress?.timestamp || workout.timestamp,
+            date: todayProgress?.date || today, // Use the date from progress data if available
             workoutId: workout.name.toLowerCase().replace(/\s+/g, '-') // Generate workoutId from name
           };
         });
@@ -298,9 +298,8 @@ export default function DashboardScreen() {
         calories = Math.round(workout.currentValue * 0.5); // Rep-based workouts
       }
       
-      // We'll use calories as the basis for XP calculation (1 calorie = 1 XP)
-      // But the actual limiting will happen in updateUserXP
-      xp = calories;
+      // Apply 0.1 multiplier to make XP progression harder
+      xp = calories * 0.1;
     }
     
     return Math.floor(xp); // Round down to nearest integer
@@ -320,8 +319,12 @@ export default function DashboardScreen() {
       }
       
       const userData = userDoc.data();
+      
+      // Get the dailyXP map - it stores XP for all days
       const dailyXP = userData.dailyXP || {};
-      const todayXP = dailyXP[today] || 0;
+      let todayXP = dailyXP[today] || 0;
+      
+      console.log("Current daily XP for today:", todayXP);
       
       // Calculate how much more XP the user can earn today (cap at 100)
       const maxAdditionalXP = Math.max(0, 100 - todayXP);
@@ -330,35 +333,45 @@ export default function DashboardScreen() {
       const limitedNewXP = Math.min(newXP, maxAdditionalXP);
       
       // If there's no more XP to be gained today, return early
-      if (limitedNewXP <= 0) return;
+      if (limitedNewXP <= 0) {
+        console.log("Daily XP limit already reached, no additional XP awarded");
+        setShowXPLimitToast(true);
+        return;
+      }
       
-      // Update the total XP with the limited amount
-      const currentTotalXP = stats.stats.totalXP + limitedNewXP;
-      const levelData = calculateLevel(currentTotalXP);
-      
-      // Update the daily XP tracking
+      // Update the dailyXP map for today
       const updatedDailyXP = {
         ...dailyXP,
         [today]: todayXP + limitedNewXP
       };
-
-      // Update the user document
-      await updateDoc(userRef, {
-        totalXP: currentTotalXP,
-        dailyXP: updatedDailyXP,
+      
+      // Calculate total XP as the sum of all daily XP values
+      let totalXP = 0;
+      Object.values(updatedDailyXP).forEach(xp => {
+        totalXP += (typeof xp === 'number') ? xp : 0;
       });
+      
+      const levelData = calculateLevel(totalXP);
+
+      // Update the user document with both daily and total XP
+      await updateDoc(userRef, {
+        totalXP: totalXP,
+        dailyXP: updatedDailyXP
+      });
+
+      console.log(`XP updated: +${limitedNewXP} XP (daily total: ${updatedDailyXP[today]}/100, overall total: ${totalXP})`);
 
       // Update local state
       setStats(prev => prev ? {
         ...prev,
         stats: {
-          totalXP: currentTotalXP,
+          totalXP: totalXP,
           ...levelData,
         },
       } : null);
       
       // If the user hit their daily limit, provide feedback
-      if (todayXP + limitedNewXP >= 100) {
+      if (updatedDailyXP[today] >= 100) {
         console.log("Daily XP limit of 100 reached!");
         setShowXPLimitToast(true);
       }
@@ -468,11 +481,15 @@ export default function DashboardScreen() {
 
       // Calculate and award XP if not already completed
       if (!workout.completed) {
-        const xpGained = calculateWorkoutXP({
+        // Update the workout object with today's date to ensure XP is tracked correctly
+        const updatedWorkout = {
           ...workout,
           currentValue: workout.targetValue,
-          completed: true
-        });
+          completed: true,
+          date: today // Ensure the date is today when completing the workout
+        };
+
+        const xpGained = calculateWorkoutXP(updatedWorkout);
 
         if (xpGained > 0) {
           await updateUserXP(xpGained);
@@ -493,7 +510,7 @@ export default function DashboardScreen() {
       const today = new Date().toISOString().split('T')[0];
       const timestamp = Date.now();
       
-      console.log("Resetting workout:", workout.name, "Completed status:", workout.completed);
+      console.log("Resetting workout:", workout.name, "Completed status:", workout.completed, "Date:", workout.date);
       
       // Get reference to user's progress document and user document
       const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
@@ -503,6 +520,12 @@ export default function DashboardScreen() {
         getDoc(progressRef),
         getDoc(userRef)
       ]);
+      
+      // Only reset workouts from today
+      if (workout.date !== today) {
+        console.log(`Cannot reset workout from ${workout.date} - only today's workouts can be reset`);
+        return;
+      }
       
       // Create new progress entry with reset values
       const resetProgress = {
@@ -534,44 +557,52 @@ export default function DashboardScreen() {
         console.log("Workout was completed, subtracting XP:", workoutXP);
         
         const userData = userDoc.data();
-        const currentTotalXP = userData.totalXP || 0;
+        
+        // Get dailyXP map for all days
         const dailyXP = userData.dailyXP || {};
-        const todayXP = dailyXP[today] || 0;
         
-        // Calculate the new total XP after removing this workout's contribution
-        const newTotalXP = Math.max(0, currentTotalXP - workoutXP);
-        const levelData = calculateLevel(newTotalXP);
-        
-        // Update daily XP tracking - ensure it doesn't go below 0
-        const updatedDailyXP = {
-          ...dailyXP,
-          [today]: Math.max(0, todayXP - workoutXP)
-        };
-        
-        console.log("Updating user document with new XP totals:", {
-          oldTotal: currentTotalXP,
-          newTotal: newTotalXP,
-          dailyXPBefore: todayXP,
-          dailyXPAfter: updatedDailyXP[today]
-        });
-        
-        // Update the user document with reduced XP
-        await updateDoc(userRef, {
-          totalXP: newTotalXP,
-          dailyXP: updatedDailyXP,
-        });
-        
-        // Update local state with new XP totals
-        setStats(prev => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            stats: {
-              totalXP: newTotalXP,
-              ...levelData,
-            }
+        // Make sure it's for today's workout
+        if (dailyXP[today] !== undefined) {
+          // Update only today's XP - ensure it doesn't go below 0
+          const updatedDailyXP = {
+            ...dailyXP,
+            [today]: Math.max(0, dailyXP[today] - workoutXP)
           };
-        });
+          
+          // Calculate the new total XP as sum of all dailyXP values
+          let totalXP = 0;
+          Object.values(updatedDailyXP).forEach(xp => {
+            totalXP += (typeof xp === 'number') ? xp : 0;
+          });
+          
+          const levelData = calculateLevel(totalXP);
+          
+          console.log("Updating user document with new XP totals:", {
+            oldDailyXP: dailyXP[today],
+            newDailyXP: updatedDailyXP[today],
+            newTotalXP: totalXP
+          });
+          
+          // Update the user document with reduced XP
+          await updateDoc(userRef, {
+            totalXP: totalXP,
+            dailyXP: updatedDailyXP
+          });
+          
+          // Update local state with new XP totals
+          setStats(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              stats: {
+                totalXP: totalXP,
+                ...levelData,
+              }
+            };
+          });
+        } else {
+          console.log(`Cannot adjust XP: no XP record for today (${today})`);
+        }
       } else {
         console.log("Workout was not completed, no XP to subtract");
       }
@@ -938,10 +969,10 @@ export default function DashboardScreen() {
             <View style={styles.xpInfoContainer}>
               <ThemedText style={[styles.xpText, { color: currentTheme.colors.accent }]}>
                 {stats.stats.currentLevelXP} / {stats.stats.xpForNextLevel} XP
-              </ThemedText>
+        </ThemedText>
               <ThemedText style={[styles.xpNeeded, { color: currentTheme.colors.accent }]}>
                 {stats.stats.xpForNextLevel - stats.stats.currentLevelXP} XP needed for Level {stats.stats.level + 1}
-              </ThemedText>
+        </ThemedText>
             </View>
           </View>
 
@@ -951,7 +982,7 @@ export default function DashboardScreen() {
               <MaterialCommunityIcons name="dumbbell" size={24} color={currentTheme.colors.accent} />
               <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
                 Daily Workouts
-              </ThemedText>
+        </ThemedText>
             </View>
             <ScrollView 
               style={styles.workoutsScrollView} 
@@ -961,7 +992,7 @@ export default function DashboardScreen() {
               {renderDailyWorkouts()}
             </ScrollView>
           </View>
-        </ThemedView>
+      </ThemedView>
       </ScrollView>
 
       {/* Edit Progress Modal */}
