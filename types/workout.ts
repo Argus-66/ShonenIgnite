@@ -9,6 +9,7 @@ export interface WorkoutProgress {
   completed: boolean;
   date: string;
   timestamp: number;
+  isAdditional?: boolean;
 }
 
 export interface DailyProgress {

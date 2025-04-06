@@ -17,21 +17,8 @@ interface DashboardStats {
   coins: number;
   stats: UserStats;
   dailyWorkouts: WorkoutProgress[];
+  additionalWorkouts: WorkoutProgress[];
   dailyCalories?: { [date: string]: number };
-}
-
-// This should match what's in types/workout.ts
-interface LocalWorkoutProgress {
-  workoutId: string;
-  name: string;
-  icon: string;
-  metric: string;
-  unit: string;
-  targetValue: number;
-  currentValue: number;
-  completed: boolean;
-  date: string;
-  timestamp: number;
 }
 
 interface DailyProgress {
@@ -40,6 +27,8 @@ interface DailyProgress {
     completed: boolean;
     timestamp: number;
     date: string;
+    unit?: string;
+    isAdditional?: boolean;
   };
 }
 
@@ -100,6 +89,10 @@ export default function DashboardScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [showXPLimitToast, setShowXPLimitToast] = useState(false);
+  const [showAddWorkoutModal, setShowAddWorkoutModal] = useState(false);
+  const [additionalWorkoutType, setAdditionalWorkoutType] = useState('Running');
+  const [additionalWorkoutValue, setAdditionalWorkoutValue] = useState('');
+  const [additionalWorkoutUnit, setAdditionalWorkoutUnit] = useState('km');
   const celebrationOpacity = useState(new Animated.Value(0))[0];
   const celebrationScale = useState(new Animated.Value(0.3))[0];
   const xpLimitToastOpacity = useState(new Animated.Value(0))[0];
@@ -164,6 +157,7 @@ export default function DashboardScreen() {
             ...calculateLevel(userData.totalXP || 0),
           },
           dailyWorkouts: [],
+          additionalWorkouts: [],
         });
         
         // Always recalculate XP to ensure accuracy
@@ -203,16 +197,50 @@ export default function DashboardScreen() {
             completed: todayProgress?.completed || false,
             timestamp: todayProgress?.timestamp || workout.timestamp,
             date: todayProgress?.date || today, // Use the date from progress data if available
-            workoutId: workout.name.toLowerCase().replace(/\s+/g, '-') // Generate workoutId from name
+            workoutId: workout.name.toLowerCase().replace(/\s+/g, '-'), // Generate workoutId from name
+            isAdditional: false // Regular daily workout
           };
         });
 
         // Sort by timestamp, most recent first
         workoutProgress.sort((a, b) => b.timestamp - a.timestamp);
         
+        // Now get additional workouts from today
+        const additionalWorkouts: WorkoutProgress[] = [];
+        
+        // Look through progress data for any workouts that are not in the regular workouts
+        // and are from today
+        Object.entries(progressData).forEach(([workoutName, dateEntries]) => {
+          const todayEntry = dateEntries[today];
+          
+          // Skip if no entry for today or if this is already in regular workouts
+          if (!todayEntry || latestWorkouts.has(workoutName)) return;
+          
+          // Check if this is marked as an additional workout
+          if (todayEntry.isAdditional) {
+            additionalWorkouts.push({
+              name: workoutName,
+              icon: getIconForWorkoutType(workoutName),
+              metric: '',
+              unit: todayEntry.unit || 'reps',
+              targetValue: todayEntry.value,
+              currentValue: todayEntry.value,
+              completed: todayEntry.completed,
+              timestamp: todayEntry.timestamp,
+              date: today,
+              workoutId: workoutName.toLowerCase().replace(/\s+/g, '-'),
+              isAdditional: true
+            });
+          }
+        });
+        
+        // Sort additional workouts by timestamp, most recent first
+        additionalWorkouts.sort((a, b) => b.timestamp - a.timestamp);
+        
         setStats(prev => prev ? {
           ...prev,
           dailyWorkouts: workoutProgress,
+          additionalWorkouts: additionalWorkouts,
         } : null);
       }
     } catch (error) {
@@ -934,7 +962,361 @@ export default function DashboardScreen() {
     );
   };
 
-  // Update modal styles with correct types
+  const handleRemoveAdditionalWorkout = async (workout: WorkoutProgress) => {
+    if (!auth.currentUser || !stats) return;
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      console.log("Removing additional workout:", workout.name, "Date:", workout.date);
+      
+      // Get reference to user's progress document
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+      const progressDoc = await getDoc(progressRef);
+      
+      if (!progressDoc.exists()) {
+        console.log("Progress document doesn't exist");
+        return;
+      }
+      
+      const progressData = progressDoc.data();
+      
+      // Check if this workout exists in progress
+      if (!progressData[workout.name] || !progressData[workout.name][today]) {
+        console.log("Workout not found in progress data");
+        return;
+      }
+      
+      // Create updated progress data without this workout for today
+      const updatedWorkoutData = { ...progressData[workout.name] };
+      delete updatedWorkoutData[today];
+      
+      // If there are no more dates for this workout, remove the entire workout
+      if (Object.keys(updatedWorkoutData).length === 0) {
+        const updatedProgressData = { ...progressData };
+        delete updatedProgressData[workout.name];
+        await setDoc(progressRef, updatedProgressData);
+      } else {
+        // Otherwise, just update this workout's data
+        await updateDoc(progressRef, {
+          [`${workout.name}`]: updatedWorkoutData
+        });
+      }
+      
+      console.log(`Removed additional workout: ${workout.name}`);
+      
+      // Recalculate XP after workout change
+      await updateXPAfterWorkoutChange();
+      
+      // Reload dashboard data
+      await loadDashboardData();
+    } catch (error) {
+      console.error('Error removing additional workout:', error);
+    }
+  };
+
+  const handleAddAdditionalWorkout = async () => {
+    if (!auth.currentUser || !stats || !additionalWorkoutValue || !additionalWorkoutType) return;
+
+    try {
+      const value = parseFloat(additionalWorkoutValue);
+      if (isNaN(value) || value <= 0) {
+        console.log("Invalid workout value");
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const timestamp = Date.now();
+      
+      console.log(`Adding additional workout: ${additionalWorkoutType} with value ${value} ${additionalWorkoutUnit}`);
+      
+      // Get reference to user's progress document
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+      const progressDoc = await getDoc(progressRef);
+      
+      // Create new progress entry
+      const newProgress = {
+        value: value,
+        completed: true,  // Additional workouts are always completed
+        timestamp,
+        date: today,
+        unit: additionalWorkoutUnit,
+        isAdditional: true  // Mark as an additional workout
+      };
+      
+      // Update or create the progress document
+      if (progressDoc.exists()) {
+        await updateDoc(progressRef, {
+          [`${additionalWorkoutType}.${today}`]: newProgress
+        });
+      } else {
+        await setDoc(progressRef, {
+          [additionalWorkoutType]: {
+            [today]: newProgress
+          }
+        });
+      }
+
+      console.log(`Added additional workout: ${additionalWorkoutType}`);
+      
+      // Recalculate XP after workout change
+      await updateXPAfterWorkoutChange();
+      
+      // Reset state and reload data
+      setShowAddWorkoutModal(false);
+      setAdditionalWorkoutValue('');
+      await loadDashboardData();
+    } catch (error) {
+      console.error('Error adding additional workout:', error);
+    }
+  };
+
+  const getIconForWorkoutType = (workoutType: string): string => {
+    // Map workout types to icons
+    const iconMap: Record<string, string> = {
+      'Running': 'run',
+      'Cycling': 'bike',
+      'Swimming': 'swim',
+      'Walking': 'walk',
+      'Push-ups': 'human-handsup',
+      'Pull-ups': 'arm-flex',
+      'Squats': 'human-male-height-variant',
+      'Planks': 'yoga',
+      'Static Stretching': 'yoga',
+      'Dynamic Stretching': 'yoga',
+      'Yoga': 'yoga',
+      'Pilates': 'yoga',
+      'Tai Chi': 'yoga',
+      'Circuit Training': 'weight-lifter',
+      'Burpees': 'arm-flex',
+      'Lunges': 'human-male-height-variant',
+      'Jumping Jacks': 'run',
+      'Sit-ups': 'human-handsup',
+    };
+    
+    return iconMap[workoutType] || 'dumbbell';
+  };
+
+  const renderAdditionalWorkouts = () => {
+    if (!stats || !stats.additionalWorkouts || stats.additionalWorkouts.length === 0) {
+      return (
+        <View style={styles.emptyState}>
+          <ThemedText style={styles.emptyStateText}>No additional workouts recorded today</ThemedText>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.workoutsList}>
+        {stats.additionalWorkouts.map((workout) => (
+          <View
+            key={`additional-${workout.name}-${workout.timestamp}`}
+            style={[styles.workoutItem, {
+              backgroundColor: `${currentTheme.colors.accent}15`,
+              borderColor: currentTheme.colors.accent,
+            }]}
+          >
+            <View style={styles.workoutItemLeft}>
+              <View style={[styles.workoutIcon, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
+                <MaterialCommunityIcons
+                  name={workout.icon as any}
+                  size={24}
+                  color={currentTheme.colors.accent}
+                />
+              </View>
+              <View style={styles.workoutInfo}>
+                <ThemedText style={[styles.workoutName, { color: currentTheme.colors.accent }]}>
+                  {workout.name}
+                </ThemedText>
+                <ThemedText style={[styles.workoutTime, { color: `${currentTheme.colors.accent}99` }]}>
+                  {new Date(workout.timestamp).toLocaleTimeString()}
+                </ThemedText>
+                <ThemedText style={[styles.additionalWorkoutValue, { color: currentTheme.colors.accent }]}>
+                  {workout.currentValue} {workout.unit}
+                </ThemedText>
+              </View>
+            </View>
+            <View style={styles.workoutRight}>
+              <TouchableOpacity
+                onPress={() => handleRemoveAdditionalWorkout(workout)}
+                style={[styles.actionButton, { borderColor: currentTheme.colors.accent, borderWidth: 1 }]}
+              >
+                <MaterialCommunityIcons name="delete" size={20} color={currentTheme.colors.accent} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  const getUnitForWorkoutType = (workoutType: string): string => {
+    // Map workout types to their default units
+    const workoutTypeUnitMap: Record<string, string> = {
+      'Running': 'km',
+      'Cycling': 'km',
+      'Swimming': 'km',
+      'Walking': 'km',
+      'Push-ups': 'reps',
+      'Pull-ups': 'reps',
+      'Squats': 'reps',
+      'Planks': 'minutes',
+      'Static Stretching': 'minutes',
+      'Dynamic Stretching': 'minutes',
+      'Yoga': 'minutes',
+      'Pilates': 'minutes',
+      'PNF Stretching': 'minutes',
+      'Tai Chi': 'minutes',
+      'Yoga Balance': 'minutes',
+      'Single-Leg Stand': 'minutes',
+      'Heel-to-Toe Walking': 'minutes',
+      'Balance Board': 'minutes',
+      'Sprint Intervals': 'meters',
+      'Circuit Training': 'minutes',
+      'Tabata': 'minutes',
+      'Burpees': 'reps',
+      'Box Jumps': 'reps',
+      'Lunges': 'reps',
+      'Step-Ups': 'reps',
+      'Medicine Ball Throws': 'reps',
+      'Kettlebell Swings': 'reps'
+    };
+    
+    return workoutTypeUnitMap[workoutType] || 'reps';
+  };
+
+  const getAvailableUnitsForWorkoutType = (workoutType: string): string[] => {
+    // Define which units are available for each workout type
+    const workoutTypeUnitsMap: Record<string, string[]> = {
+      'Running': ['km', 'minutes'],
+      'Cycling': ['km', 'minutes'],
+      'Swimming': ['km', 'minutes'],
+      'Walking': ['km', 'minutes'],
+      'Push-ups': ['reps'],
+      'Pull-ups': ['reps'],
+      'Squats': ['reps'],
+      'Planks': ['minutes', 'seconds'],
+      'Static Stretching': ['minutes'],
+      'Dynamic Stretching': ['minutes'],
+      'Yoga': ['minutes'],
+      'Pilates': ['minutes'],
+      'PNF Stretching': ['minutes'],
+      'Tai Chi': ['minutes'],
+      'Yoga Balance': ['minutes'],
+      'Single-Leg Stand': ['minutes', 'seconds'],
+      'Heel-to-Toe Walking': ['minutes', 'meters'],
+      'Balance Board': ['minutes'],
+      'Sprint Intervals': ['meters', 'minutes'],
+      'Circuit Training': ['minutes'],
+      'Tabata': ['minutes'],
+      'Burpees': ['reps'],
+      'Box Jumps': ['reps'],
+      'Lunges': ['reps'],
+      'Step-Ups': ['reps'],
+      'Medicine Ball Throws': ['reps'],
+      'Kettlebell Swings': ['reps']
+    };
+    
+    return workoutTypeUnitsMap[workoutType] || ['reps', 'minutes', 'km'];
+  };
+
+  // Add a function to group workout options by category
+  const renderWorkoutOptionsByCategory = () => {
+    // Create a list of all workout types
+    const workoutOptions = [
+      // Cardiovascular
+      { name: 'Running', category: 'Cardiovascular' },
+      { name: 'Cycling', category: 'Cardiovascular' },
+      { name: 'Swimming', category: 'Cardiovascular' },
+      { name: 'Walking', category: 'Cardiovascular' },
+      
+      // Strength Training
+      { name: 'Push-ups', category: 'Strength' },
+      { name: 'Pull-ups', category: 'Strength' },
+      { name: 'Squats', category: 'Strength' },
+      { name: 'Planks', category: 'Strength' },
+      
+      // Flexibility & Mobility
+      { name: 'Static Stretching', category: 'Flexibility' },
+      { name: 'Dynamic Stretching', category: 'Flexibility' },
+      { name: 'Yoga', category: 'Flexibility' },
+      { name: 'Pilates', category: 'Flexibility' },
+      { name: 'PNF Stretching', category: 'Flexibility' },
+      
+      // Balance & Stability
+      { name: 'Tai Chi', category: 'Balance' },
+      { name: 'Yoga Balance', category: 'Balance' },
+      { name: 'Single-Leg Stand', category: 'Balance' },
+      { name: 'Heel-to-Toe Walking', category: 'Balance' },
+      { name: 'Balance Board', category: 'Balance' },
+      
+      // HIIT
+      { name: 'Sprint Intervals', category: 'HIIT' },
+      { name: 'Circuit Training', category: 'HIIT' },
+      { name: 'Tabata', category: 'HIIT' },
+      { name: 'Burpees', category: 'HIIT' },
+      { name: 'Box Jumps', category: 'HIIT' },
+      
+      // Functional Training
+      { name: 'Lunges', category: 'Functional' },
+      { name: 'Step-Ups', category: 'Functional' },
+      { name: 'Medicine Ball Throws', category: 'Functional' },
+      { name: 'Kettlebell Swings', category: 'Functional' },
+    ];
+    
+    // Group by category
+    const groupedOptions: Record<string, { name: string, category: string }[]> = {};
+    workoutOptions.forEach(option => {
+      if (!groupedOptions[option.category]) {
+        groupedOptions[option.category] = [];
+      }
+      groupedOptions[option.category].push(option);
+    });
+    
+    // Return JSX for each category
+    return Object.entries(groupedOptions).map(([category, options]) => (
+      <View key={category} style={{ marginBottom: 12 }}>
+        <Text style={{ 
+          fontSize: 14, 
+          fontWeight: '600', 
+          color: currentTheme.colors.accent, 
+          marginBottom: 8,
+          marginLeft: 4
+        }}>
+          {category}
+        </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {options.map(option => (
+            <TouchableOpacity
+              key={option.name}
+              style={[
+                modalStyles.pickerItem,
+                additionalWorkoutType === option.name && {
+                  backgroundColor: currentTheme.colors.accent,
+                },
+              ]}
+              onPress={() => {
+                setAdditionalWorkoutType(option.name);
+                const defaultUnit = getUnitForWorkoutType(option.name);
+                setAdditionalWorkoutUnit(defaultUnit);
+              }}
+            >
+              <Text
+                style={[
+                  modalStyles.pickerItemText,
+                  additionalWorkoutType === option.name && { color: '#fff' },
+                ]}
+              >
+                {option.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    ));
+  };
+
+  // Update modal styles with improvements for the workout type picker
   const modalStyles = StyleSheet.create({
     modalContainer: {
       flex: 1,
@@ -957,6 +1339,15 @@ export default function DashboardScreen() {
       color: currentTheme.colors.text,
       marginBottom: 20,
     },
+    inputGroup: {
+      marginBottom: 16,
+    },
+    inputLabel: {
+      fontSize: 16,
+      fontWeight: '500' as const,
+      color: currentTheme.colors.text,
+      marginBottom: 8,
+    },
     input: {
       height: 48,
       borderWidth: 1,
@@ -967,6 +1358,24 @@ export default function DashboardScreen() {
       backgroundColor: currentTheme.colors.background,
       color: currentTheme.colors.text,
       borderColor: currentTheme.colors.accent,
+    },
+    picker: {
+      flexDirection: 'row' as const,
+      marginBottom: 16,
+    },
+    pickerItem: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 16,
+      marginRight: 4,
+      marginBottom: 4,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.accent,
+    },
+    pickerItemText: {
+      fontSize: 14,
+      fontWeight: '500' as const,
+      color: currentTheme.colors.text,
     },
     modalButtons: {
       flexDirection: 'row' as const,
@@ -1144,6 +1553,35 @@ export default function DashboardScreen() {
               {renderDailyWorkouts()}
             </ScrollView>
           </View>
+
+          {/* Additional Workouts */}
+          <View style={[styles.section, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
+            <View style={styles.sectionHeader}>
+              <MaterialCommunityIcons name="plus-circle" size={24} color={currentTheme.colors.accent} />
+              <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
+                Additional Workouts
+              </ThemedText>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.addWorkoutButton,
+                { backgroundColor: currentTheme.colors.accent }
+              ]}
+              onPress={() => setShowAddWorkoutModal(true)}
+            >
+              <MaterialCommunityIcons name="plus" size={20} color="#fff" />
+              <ThemedText style={[styles.addWorkoutButtonText, { color: '#fff' }]}>
+                Add Workout
+              </ThemedText>
+            </TouchableOpacity>
+            <ScrollView 
+              style={styles.workoutsScrollView} 
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
+            >
+              {renderAdditionalWorkouts()}
+            </ScrollView>
+          </View>
         </ThemedView>
       </ScrollView>
 
@@ -1187,6 +1625,98 @@ export default function DashboardScreen() {
                 onPress={handleUpdateProgress}
               >
                 <Text style={modalStyles.buttonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Workout Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showAddWorkoutModal}
+        onRequestClose={() => {
+          setShowAddWorkoutModal(false);
+          setAdditionalWorkoutValue('');
+        }}
+      >
+        <View style={modalStyles.modalContainer}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>
+              Add Additional Workout
+            </Text>
+            
+            <Text style={{ fontSize: 16, marginBottom: 8, color: currentTheme.colors.text }}>
+              Workout Type
+            </Text>
+            <ScrollView 
+              style={{ maxHeight: 200, marginBottom: 16 }} 
+              showsVerticalScrollIndicator={true}
+            >
+              {renderWorkoutOptionsByCategory()}
+            </ScrollView>
+            
+            <Text style={{ fontSize: 16, marginBottom: 8, color: currentTheme.colors.text }}>
+              Value
+            </Text>
+            <TextInput
+              style={[modalStyles.input, { fontSize: 18 }]}
+              value={additionalWorkoutValue}
+              onChangeText={setAdditionalWorkoutValue}
+              keyboardType="numeric"
+              placeholder={`Enter value in ${additionalWorkoutUnit}`}
+              placeholderTextColor={`${currentTheme.colors.text}50`}
+            />
+            
+            <Text style={{ fontSize: 16, marginBottom: 8, color: currentTheme.colors.text }}>
+              Unit
+            </Text>
+            <View style={{ flexDirection: 'row', marginBottom: 16 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {getAvailableUnitsForWorkoutType(additionalWorkoutType).map((unit) => (
+                  <TouchableOpacity
+                    key={unit}
+                    style={{
+                      paddingVertical: 8,
+                      paddingHorizontal: 16,
+                      borderRadius: 24,
+                      marginRight: 8,
+                      borderWidth: 1,
+                      borderColor: currentTheme.colors.accent,
+                      backgroundColor: additionalWorkoutUnit === unit ? currentTheme.colors.accent : 'transparent',
+                    }}
+                    onPress={() => setAdditionalWorkoutUnit(unit)}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: '500',
+                        color: additionalWorkoutUnit === unit ? '#fff' : currentTheme.colors.text,
+                      }}
+                    >
+                      {unit}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            
+            <View style={modalStyles.modalButtons}>
+              <TouchableOpacity
+                style={[modalStyles.button, { backgroundColor: currentTheme.colors.error }]}
+                onPress={() => {
+                  setShowAddWorkoutModal(false);
+                  setAdditionalWorkoutValue('');
+                }}
+              >
+                <Text style={modalStyles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[modalStyles.button, { backgroundColor: currentTheme.colors.accent }]}
+                onPress={handleAddAdditionalWorkout}
+              >
+                <Text style={modalStyles.buttonText}>Add</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1354,7 +1884,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     gap: 8,
-    marginTop: 12,
+    marginBottom: 12,
   },
   completeAllButtonText: {
     fontSize: 16,
@@ -1421,5 +1951,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
     flexShrink: 1,
+  },
+  addWorkoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 12,
+  },
+  addWorkoutButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  additionalWorkoutValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 4,
   },
 });
