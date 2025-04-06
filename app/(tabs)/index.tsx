@@ -1575,8 +1575,8 @@ export default function DashboardScreen() {
               </ThemedText>
             </TouchableOpacity>
             <ScrollView 
-              style={styles.workoutsScrollView} 
-              showsVerticalScrollIndicator={false}
+              style={styles.additionalWorkoutsScrollView} 
+              showsVerticalScrollIndicator={true}
               nestedScrollEnabled={true}
             >
               {renderAdditionalWorkouts()}
@@ -1969,5 +1969,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginTop: 4,
+  },
+  additionalWorkoutsScrollView: {
+    height: 200, // Fixed height to show approximately 2 workouts
   },
 });
