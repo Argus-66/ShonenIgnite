@@ -202,31 +202,57 @@ export default function WorkoutsScreen() {
         const data = userWorkoutsDoc.data();
         const workouts = data.workouts || [];
         
-        // Check for duplicate workouts more thoroughly
+        // Get today's workouts
         const todaysWorkouts = workouts.filter((w: Exercise) => w.date === today);
-        const hasDuplicate = todaysWorkouts.some((w: Exercise) => 
-          w.name === newWorkout.name && 
-          w.value === newWorkout.value
-        );
-
-        if (hasDuplicate) {
-          // Don't add duplicate workout
-          setShowExerciseModal(false);
-          setExerciseValue('');
-          setSelectedExercise(null);
-          return;
+        
+        // Check if this exact workout type already exists for today
+        const existingWorkout = todaysWorkouts.find((w: Exercise) => w.name === newWorkout.name);
+        
+        if (existingWorkout) {
+          // Update the existing workout instead of adding a new one
+          const updatedWorkouts = workouts.map((w: Exercise) => {
+            if (w.date === today && w.name === newWorkout.name) {
+              return {
+                ...w,
+                value: finalValue,
+                timestamp: timestamp // Update timestamp
+              };
+            }
+            return w;
+          });
+          
+          await updateDoc(userWorkoutsRef, {
+            workouts: updatedWorkouts
+          });
+          
+          // Update local state
+          setTodayWorkouts(prev => 
+            prev.map(w => 
+              w.name === newWorkout.name ? 
+              { ...w, value: finalValue, timestamp: timestamp } : 
+              w
+            )
+          );
+        } else {
+          // Add new workout if it doesn't exist for today
+          await updateDoc(userWorkoutsRef, {
+            workouts: arrayUnion(newWorkout)
+          });
+          
+          // Update local state
+          setTodayWorkouts(prev => [newWorkout, ...prev]);
         }
-
-        await updateDoc(userWorkoutsRef, {
-          workouts: arrayUnion(newWorkout)
-        });
       } else {
+        // Create new document if it doesn't exist
         await setDoc(userWorkoutsRef, {
           workouts: [newWorkout]
         });
+        
+        // Update local state
+        setTodayWorkouts([newWorkout]);
       }
       
-      setTodayWorkouts(prev => [newWorkout, ...prev]);
+      // Reset UI state
       setShowExerciseModal(false);
       setExerciseValue('');
       setSelectedExercise(null);

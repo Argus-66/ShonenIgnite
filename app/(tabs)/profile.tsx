@@ -25,6 +25,8 @@ interface UserProfile {
   theme: string;
   streak: number;
   bestStreak: number;
+  followers: string[];
+  following: string[];
 }
 
 interface DetailCardProps {
@@ -439,26 +441,61 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   emptyState: {
-    padding: 24,
+    padding: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyStateText: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginTop: 16,
-    textAlign: 'center',
+    marginTop: 12,
   },
   emptyStateSubtext: {
     fontSize: 14,
     opacity: 0.7,
-    marginTop: 8,
-    textAlign: 'center',
+    marginTop: 4,
   },
   loadingState: {
-    padding: 24,
+    padding: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  userListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderBottomWidth: 1,
+  },
+  userListItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  userAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  userListItemName: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    margin: 10,
+  },
+  searchInput: {
+    flex: 1,
+    height: 36,
+    marginLeft: 8,
+    fontSize: 16,
   },
 });
 
@@ -469,6 +506,12 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showThemeModal, setShowThemeModal] = useState(false);
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [showFollowingModal, setShowFollowingModal] = useState(false);
+  const [followersList, setFollowersList] = useState<any[]>([]);
+  const [followingList, setFollowingList] = useState<any[]>([]);
+  const [followersSearchQuery, setFollowersSearchQuery] = useState('');
+  const [followingSearchQuery, setFollowingSearchQuery] = useState('');
   const [editableProfile, setEditableProfile] = useState<Partial<UserProfile>>({});
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [workoutData, setWorkoutData] = useState<{ [date: string]: number }>({});
@@ -508,6 +551,8 @@ export default function ProfileScreen() {
           theme: userData.theme || 'default',
           streak: userData.streak || 0,
           bestStreak: userData.bestStreak || 0,
+          followers: userData.followers || [],
+          following: userData.following || [],
         });
         setEditableProfile({
           age: userData.age,
@@ -701,22 +746,48 @@ export default function ProfileScreen() {
     if (!auth.currentUser) return;
 
     try {
-      const userWorkoutsRef = doc(db, 'daily_workouts', auth.currentUser.uid);
-      const userWorkoutsDoc = await getDoc(userWorkoutsRef);
+      setDayWorkouts([]); // Clear previous workouts first
       
-      if (userWorkoutsDoc.exists()) {
-        const data = userWorkoutsDoc.data();
-        const workouts = data.workouts || [];
+      // Get workout data from daily_workout_progress instead of daily_workouts
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+      const progressDoc = await getDoc(progressRef);
+      
+      if (progressDoc.exists()) {
+        const data = progressDoc.data();
+        const workoutsForDate: any[] = [];
         
-        // Filter workouts for the selected date
-        const selectedDateWorkouts = workouts.filter((w: any) => w.date === date);
+        // Process all workouts for the selected date
+        Object.entries(data).forEach(([workoutName, dateEntries]: [string, any]) => {
+          if (dateEntries[date]) {
+            const workoutData = dateEntries[date];
+            
+            // Get the workout icon from the workout name
+            let icon = "dumbbell";
+            if (workoutName.includes("Running")) icon = "run";
+            else if (workoutName.includes("Cycling")) icon = "bike";
+            else if (workoutName.includes("Walking")) icon = "walk";
+            else if (workoutName.includes("Push-ups")) icon = "human";
+            else if (workoutName.includes("Squats")) icon = "human-handsdown";
+            else if (workoutName.includes("Swimming")) icon = "swim";
+            
+            // Add this workout to our list
+            workoutsForDate.push({
+              name: workoutName,
+              icon: icon,
+              value: workoutData.value,
+              unit: workoutData.unit,
+              date: workoutData.date,
+              timestamp: workoutData.timestamp,
+              completed: workoutData.completed,
+            });
+          }
+        });
         
-        // Calculate calories for each workout (this is a simple approximation)
-        const workoutsWithCalories = selectedDateWorkouts.map((workout: any) => {
+        // Calculate calories for each workout
+        const workoutsWithCalories = workoutsForDate.map((workout) => {
           let calories = 0;
           
           // Simple calories calculation based on workout type and duration/distance
-          // These are rough estimates and could be improved with more accurate formulas
           if (workout.unit === 'minutes') {
             // Time-based workouts: roughly 5-10 calories per minute depending on intensity
             if (workout.name.includes('Running')) {
@@ -752,7 +823,12 @@ export default function ProfileScreen() {
           };
         });
         
+        // Sort workouts by timestamp, most recent first
+        workoutsWithCalories.sort((a, b) => b.timestamp - a.timestamp);
+        
         setDayWorkouts(workoutsWithCalories);
+      } else {
+        setDayWorkouts([]);
       }
     } catch (error) {
       console.error('Error loading workouts for date:', error);
@@ -770,6 +846,72 @@ export default function ProfileScreen() {
       day: 'numeric' 
     });
   };
+
+  const handleFollowersPress = async () => {
+    if (!auth.currentUser || !userProfile) return;
+    
+    try {
+      // Load followers data
+      const followerProfiles: any[] = [];
+      
+      // If there are followers, fetch their profiles
+      if (userProfile.followers && userProfile.followers.length > 0) {
+        // Fetch each follower's data
+        for (const followerId of userProfile.followers) {
+          const followerDoc = await getDoc(doc(db, 'users', followerId));
+          if (followerDoc.exists()) {
+            followerProfiles.push({
+              id: followerId,
+              username: followerDoc.data().username,
+              // Add other relevant user data
+            });
+          }
+        }
+      }
+      
+      setFollowersList(followerProfiles);
+      setShowFollowersModal(true);
+    } catch (error) {
+      console.error('Error loading followers:', error);
+    }
+  };
+
+  const handleFollowingPress = async () => {
+    if (!auth.currentUser || !userProfile) return;
+    
+    try {
+      // Load following data
+      const followingProfiles: any[] = [];
+      
+      // If the user is following anyone, fetch their profiles
+      if (userProfile.following && userProfile.following.length > 0) {
+        // Fetch each followed user's data
+        for (const followingId of userProfile.following) {
+          const followingDoc = await getDoc(doc(db, 'users', followingId));
+          if (followingDoc.exists()) {
+            followingProfiles.push({
+              id: followingId,
+              username: followingDoc.data().username,
+              // Add other relevant user data
+            });
+          }
+        }
+      }
+      
+      setFollowingList(followingProfiles);
+      setShowFollowingModal(true);
+    } catch (error) {
+      console.error('Error loading following:', error);
+    }
+  };
+
+  const filteredFollowers = followersList.filter(follower => 
+    follower.username.toLowerCase().includes(followersSearchQuery.toLowerCase())
+  );
+
+  const filteredFollowing = followingList.filter(following => 
+    following.username.toLowerCase().includes(followingSearchQuery.toLowerCase())
+  );
 
   if (!currentTheme || !availableThemes) {
     return (
@@ -849,6 +991,10 @@ export default function ProfileScreen() {
         <ThemedView style={styles.container}>
           <ProfileHeader
             username={userProfile?.username || ""}
+            followersCount={userProfile?.followers?.length || 0}
+            followingCount={userProfile?.following?.length || 0}
+            onFollowersPress={handleFollowersPress}
+            onFollowingPress={handleFollowingPress}
             onEditPress={() => setShowEditModal(true)}
             onLogoutPress={handleLogout}
           />
@@ -1068,7 +1214,8 @@ export default function ProfileScreen() {
                         ))
                       ) : (
                         <View style={styles.loadingState}>
-                          <ThemedText>Loading workouts...</ThemedText>
+                          <MaterialCommunityIcons name="sync" size={24} color={currentTheme.colors.text} />
+                          <ThemedText style={{ fontSize: 16, marginTop: 8 }}>Loading workouts...</ThemedText>
                         </View>
                       )
                     ) : (
@@ -1084,6 +1231,138 @@ export default function ProfileScreen() {
                     )}
                   </ScrollView>
                 )}
+              </View>
+            </View>
+          </Modal>
+
+          <Modal
+            visible={showFollowersModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowFollowersModal(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, { backgroundColor: currentTheme.colors.background, borderRadius: 16 }]}>
+                <View style={styles.modalHeader}>
+                  <ThemedText style={styles.modalTitle}>Followers</ThemedText>
+                  <TouchableOpacity onPress={() => setShowFollowersModal(false)}>
+                    <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.text} />
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={[styles.searchContainer, { backgroundColor: `${currentTheme.colors.text}10` }]}>
+                  <MaterialCommunityIcons name="magnify" size={20} color={currentTheme.colors.text} />
+                  <TextInput
+                    style={[styles.searchInput, { color: currentTheme.colors.text }]}
+                    placeholder="Search followers"
+                    placeholderTextColor={`${currentTheme.colors.text}50`}
+                    value={followersSearchQuery}
+                    onChangeText={setFollowersSearchQuery}
+                  />
+                  {followersSearchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setFollowersSearchQuery('')}>
+                      <MaterialCommunityIcons name="close-circle" size={18} color={currentTheme.colors.text} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                
+                <ScrollView style={{ maxHeight: 400 }}>
+                  {filteredFollowers.length > 0 ? (
+                    filteredFollowers.map(follower => (
+                      <TouchableOpacity 
+                        key={follower.id} 
+                        style={[styles.userListItem, { borderBottomColor: currentTheme.colors.border }]}
+                        onPress={() => {
+                          setShowFollowersModal(false);
+                          router.push({
+                            pathname: "/profile/[userId]",
+                            params: { userId: follower.id }
+                          });
+                        }}
+                      >
+                        <View style={styles.userListItemLeft}>
+                          <View style={[styles.userAvatar, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
+                            <MaterialCommunityIcons name="account" size={20} color={currentTheme.colors.accent} />
+                          </View>
+                          <ThemedText style={styles.userListItemName}>{follower.username}</ThemedText>
+                        </View>
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <View style={styles.emptyState}>
+                      <MaterialCommunityIcons name="account-group" size={48} color={`${currentTheme.colors.text}50`} />
+                      <ThemedText style={styles.emptyStateText}>
+                        {followersSearchQuery.length > 0 ? 'No matching followers found' : 'No followers yet'}
+                      </ThemedText>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+
+          <Modal
+            visible={showFollowingModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowFollowingModal(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, { backgroundColor: currentTheme.colors.background, borderRadius: 16 }]}>
+                <View style={styles.modalHeader}>
+                  <ThemedText style={styles.modalTitle}>Following</ThemedText>
+                  <TouchableOpacity onPress={() => setShowFollowingModal(false)}>
+                    <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.text} />
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={[styles.searchContainer, { backgroundColor: `${currentTheme.colors.text}10` }]}>
+                  <MaterialCommunityIcons name="magnify" size={20} color={currentTheme.colors.text} />
+                  <TextInput
+                    style={[styles.searchInput, { color: currentTheme.colors.text }]}
+                    placeholder="Search following"
+                    placeholderTextColor={`${currentTheme.colors.text}50`}
+                    value={followingSearchQuery}
+                    onChangeText={setFollowingSearchQuery}
+                  />
+                  {followingSearchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setFollowingSearchQuery('')}>
+                      <MaterialCommunityIcons name="close-circle" size={18} color={currentTheme.colors.text} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                
+                <ScrollView style={{ maxHeight: 400 }}>
+                  {filteredFollowing.length > 0 ? (
+                    filteredFollowing.map(following => (
+                      <TouchableOpacity 
+                        key={following.id} 
+                        style={[styles.userListItem, { borderBottomColor: currentTheme.colors.border }]}
+                        onPress={() => {
+                          setShowFollowingModal(false);
+                          router.push({
+                            pathname: "/profile/[userId]",
+                            params: { userId: following.id }
+                          });
+                        }}
+                      >
+                        <View style={styles.userListItemLeft}>
+                          <View style={[styles.userAvatar, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
+                            <MaterialCommunityIcons name="account" size={20} color={currentTheme.colors.accent} />
+                          </View>
+                          <ThemedText style={styles.userListItemName}>{following.username}</ThemedText>
+                        </View>
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <View style={styles.emptyState}>
+                      <MaterialCommunityIcons name="account-group" size={48} color={`${currentTheme.colors.text}50`} />
+                      <ThemedText style={styles.emptyStateText}>
+                        {followingSearchQuery.length > 0 ? 'No matching users found' : 'Not following anyone yet'}
+                      </ThemedText>
+                    </View>
+                  )}
+                </ScrollView>
               </View>
             </View>
           </Modal>

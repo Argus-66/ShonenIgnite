@@ -843,7 +843,7 @@ export default function DashboardScreen() {
   };
 
   const renderWorkoutItem = (workout: WorkoutProgress) => {
-    return (
+  return (
       <TouchableOpacity
         key={`${workout.workoutId}-${workout.timestamp}`}
         style={[styles.workoutItem, {
@@ -867,10 +867,10 @@ export default function DashboardScreen() {
           <View style={styles.workoutInfo}>
             <ThemedText style={[styles.workoutName, { color: currentTheme.colors.accent }]}>
               {workout.name}
-            </ThemedText>
+        </ThemedText>
             <ThemedText style={[styles.workoutTime, { color: `${currentTheme.colors.accent}99` }]}>
               {new Date(workout.timestamp).toLocaleTimeString()}
-            </ThemedText>
+        </ThemedText>
             <View style={[styles.progressBarContainer, { marginTop: 8 }]}>
               <View 
                 style={[
@@ -1458,7 +1458,7 @@ export default function DashboardScreen() {
       <SafeAreaView style={styles.safeArea}>
         <ThemedView style={styles.container}>
           <ThemedText>Loading dashboard...</ThemedText>
-        </ThemedView>
+      </ThemedView>
       </SafeAreaView>
     );
   }
@@ -1490,7 +1490,7 @@ export default function DashboardScreen() {
             <View>
               <ThemedText style={[styles.welcomeText, { color: currentTheme.colors.accent }]}>
                 Welcome back,
-              </ThemedText>
+        </ThemedText>
               <ThemedText style={[styles.username, { color: currentTheme.colors.accent }]}>
                 {stats.username}
               </ThemedText>
@@ -1582,7 +1582,7 @@ export default function DashboardScreen() {
               {renderAdditionalWorkouts()}
             </ScrollView>
           </View>
-        </ThemedView>
+      </ThemedView>
       </ScrollView>
 
       {/* Edit Progress Modal */}
