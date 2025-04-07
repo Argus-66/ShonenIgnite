@@ -2,32 +2,25 @@ import { Stack } from 'expo-router';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { useEffect } from 'react';
 import { auth } from '@/config/firebase';
-import { useRouter, useSegments } from 'expo-router';
+import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
-function useProtectedRoute() {
-  const segments = useSegments();
-  const router = useRouter();
-
+export default function RootLayout() {
   useEffect(() => {
+    // Set up an authentication state observer
     const unsubscribe = auth.onAuthStateChanged((user) => {
-      const inAuthGroup = segments[0] === 'auth';
-      
-      if (!user && !inAuthGroup) {
-        // If user is not signed in and the initial segment is not auth, redirect to login
-        router.replace('/auth/login');
-      } else if (user && inAuthGroup) {
-        // If user is signed in and the initial segment is auth, redirect to home
+      if (user) {
+        // User is signed in, redirect to dashboard
         router.replace('/(tabs)');
+      } else {
+        // No user is signed in, stay on login screen
+        router.replace('/login');
       }
     });
 
-    return unsubscribe;
-  }, [segments]);
-}
-
-export default function RootLayout() {
-  useProtectedRoute();
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, []);
 
   return (
     <ThemeProvider>
