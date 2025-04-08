@@ -1,21 +1,36 @@
 {
   "expo": {
     "name": "FitnessFreak",
-    "slug": "FitnessFreak",
+    "slug": "fitnessfreak",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#121212"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "FitnessFreak needs your location to show nearby users on the leaderboard and find workout buddies in your area.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "FitnessFreak needs your location to show nearby users on the leaderboard and find workout buddies in your area."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      }
+        "backgroundColor": "#121212"
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -25,12 +40,9 @@
     "plugins": [
       "expo-router",
       [
-        "expo-splash-screen",
+        "expo-location",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "locationAlwaysAndWhenInUsePermission": "FitnessFreak needs your location to show nearby users on the leaderboard and find workout buddies in your area."
         }
       ]
     ],
