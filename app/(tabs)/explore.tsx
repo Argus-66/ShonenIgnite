@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView, Platform, StatusBar, TextInput, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, SafeAreaView, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Image } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { auth, db } from '@/config/firebase';
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, query, getDocs, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { router } from 'expo-router';
+import getProfileImageByTheme from '@/utils/profileImages';
 
 interface UserData {
   id: string;
@@ -14,6 +15,7 @@ interface UserData {
   followers: string[];
   following: string[];
   bio?: string;
+  theme: string;
 }
 
 export default function ExploreScreen() {
@@ -49,7 +51,8 @@ export default function ExploreScreen() {
           username: userData.username,
           followers: userData.followers || [],
           following: userData.following || [],
-          bio: userData.bio || ''
+          bio: userData.bio || '',
+          theme: userData.theme || 'default'
         });
       }
     } catch (error) {
@@ -74,7 +77,8 @@ export default function ExploreScreen() {
             username: userData.username,
             followers: userData.followers || [],
             following: userData.following || [],
-            bio: userData.bio || ''
+            bio: userData.bio || '',
+            theme: userData.theme || 'default'
           });
         }
       });
@@ -110,7 +114,8 @@ export default function ExploreScreen() {
               username: userData.username,
               followers: userData.followers || [],
               following: userData.following || [],
-              bio: userData.bio || ''
+              bio: userData.bio || '',
+              theme: userData.theme || 'default'
             });
           }
         }
@@ -205,8 +210,11 @@ export default function ExploreScreen() {
   };
 
   const handleViewProfile = (userId: string) => {
-    // Navigate to user profile
-    router.push(`/profile/${userId}`);
+    // Navigate to user profile with the proper params format
+    router.push({
+      pathname: "/profile/[userId]",
+      params: { userId }
+    });
   };
 
   const renderUserItem = ({ item }: { item: UserData }) => (
@@ -215,8 +223,12 @@ export default function ExploreScreen() {
       onPress={() => handleViewProfile(item.id)}
     >
       <View style={styles.userInfo}>
-        <View style={[styles.userAvatar, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
-          <MaterialCommunityIcons name="account" size={24} color={currentTheme.colors.accent} />
+        <View style={[styles.userAvatar, { borderColor: currentTheme.colors.accent }]}>
+          <Image 
+            source={getProfileImageByTheme(item.theme)}
+            style={styles.avatarImage}
+            resizeMode="cover"
+          />
         </View>
         <View>
           <ThemedText style={styles.username}>{item.username}</ThemedText>
@@ -370,9 +382,13 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
     marginRight: 12,
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   username: {
     fontSize: 16,

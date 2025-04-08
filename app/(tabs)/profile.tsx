@@ -1,4 +1,4 @@
-import { StyleSheet, View, TouchableOpacity, SafeAreaView, Modal, TextInput, ScrollView, StatusBar, RefreshControl } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, SafeAreaView, Modal, TextInput, ScrollView, StatusBar, RefreshControl, Image } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -13,6 +13,7 @@ import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { UserStats } from '@/components/profile/UserStats';
 import { BioSection } from '@/components/profile/BioSection';
 import { ThemeSelector } from '@/components/profile/ThemeSelector';
+import getProfileImageByTheme from '@/utils/profileImages';
 
 interface UserProfile {
   username: string;
@@ -475,9 +476,13 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
     marginRight: 12,
+  },
+  userAvatarImage: {
+    width: '100%',
+    height: '100%',
   },
   userListItemName: {
     fontSize: 16,
@@ -863,7 +868,7 @@ export default function ProfileScreen() {
             followerProfiles.push({
               id: followerId,
               username: followerDoc.data().username,
-              // Add other relevant user data
+              theme: followerDoc.data().theme || 'default'
             });
           }
         }
@@ -892,7 +897,7 @@ export default function ProfileScreen() {
             followingProfiles.push({
               id: followingId,
               username: followingDoc.data().username,
-              // Add other relevant user data
+              theme: followingDoc.data().theme || 'default'
             });
           }
         }
@@ -997,6 +1002,7 @@ export default function ProfileScreen() {
             onFollowingPress={handleFollowingPress}
             onEditPress={() => setShowEditModal(true)}
             onLogoutPress={handleLogout}
+            themeName={userProfile?.theme || "default"}
           />
 
           <UserStats
@@ -1281,8 +1287,12 @@ export default function ProfileScreen() {
                         }}
                       >
                         <View style={styles.userListItemLeft}>
-                          <View style={[styles.userAvatar, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
-                            <MaterialCommunityIcons name="account" size={20} color={currentTheme.colors.accent} />
+                          <View style={[styles.userAvatar, { borderColor: currentTheme.colors.accent }]}>
+                            <Image 
+                              source={getProfileImageByTheme(follower.theme)}
+                              style={styles.userAvatarImage}
+                              resizeMode="cover"
+                            />
                           </View>
                           <ThemedText style={styles.userListItemName}>{follower.username}</ThemedText>
                         </View>
@@ -1347,8 +1357,12 @@ export default function ProfileScreen() {
                         }}
                       >
                         <View style={styles.userListItemLeft}>
-                          <View style={[styles.userAvatar, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
-                            <MaterialCommunityIcons name="account" size={20} color={currentTheme.colors.accent} />
+                          <View style={[styles.userAvatar, { borderColor: currentTheme.colors.accent }]}>
+                            <Image 
+                              source={getProfileImageByTheme(following.theme)}
+                              style={styles.userAvatarImage}
+                              resizeMode="cover"
+                            />
                           </View>
                           <ThemedText style={styles.userListItemName}>{following.username}</ThemedText>
                         </View>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, View, TouchableOpacity, SafeAreaView, ScrollView } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, SafeAreaView, ScrollView, Image, Modal } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -9,6 +9,7 @@ import { auth, db } from '@/config/firebase';
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { ActivitySection } from '@/components/profile/ActivitySection';
 import { BioSection } from '@/components/profile/BioSection';
+import getProfileImageByTheme from '@/utils/profileImages';
 
 interface UserProfile {
   username: string;
@@ -29,6 +30,7 @@ export default function UserProfileScreen() {
   const [workoutData, setWorkoutData] = useState<{ [date: string]: number }>({});
   const [maxWorkouts, setMaxWorkouts] = useState(0);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
 
   useEffect(() => {
     loadUserProfile();
@@ -217,12 +219,19 @@ export default function UserProfileScreen() {
 
           <View style={[styles.profileHeader, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
             <View style={styles.profileInfo}>
-              <View style={[styles.avatarContainer, { 
-                borderColor: currentTheme.colors.accent,
-                backgroundColor: `${currentTheme.colors.accent}30` 
-              }]}>
-                <MaterialCommunityIcons name="account" size={32} color={currentTheme.colors.accent} />
-              </View>
+              <TouchableOpacity 
+                style={[styles.avatarContainer, { 
+                  borderColor: currentTheme.colors.accent,
+                }]}
+                onPress={() => setImageViewerVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Image 
+                  source={getProfileImageByTheme(userProfile.theme)}
+                  style={styles.avatar}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
 
               <ThemedText style={styles.username}>{userProfile.username}</ThemedText>
               
@@ -276,6 +285,34 @@ export default function UserProfileScreen() {
 
         </ThemedView>
       </ScrollView>
+
+      {/* Full-screen Image Viewer Modal */}
+      <Modal
+        visible={imageViewerVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setImageViewerVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <TouchableOpacity 
+            style={styles.closeButton}
+            onPress={() => setImageViewerVisible(false)}
+          >
+            <MaterialCommunityIcons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.modalBackground}
+            activeOpacity={1}
+            onPress={() => setImageViewerVisible(false)}
+          >
+            <Image 
+              source={getProfileImageByTheme(userProfile?.theme || 'default')}
+              style={styles.fullImage}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -315,9 +352,12 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 40,
     borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
+    overflow: 'hidden',
     marginBottom: 8,
+  },
+  avatar: {
+    width: '100%',
+    height: '100%',
   },
   username: {
     fontSize: 20,
@@ -369,5 +409,28 @@ const styles = StyleSheet.create({
   backButtonText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBackground: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullImage: {
+    width: '90%',
+    height: '90%',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    zIndex: 10,
+    padding: 10,
   },
 }); 
