@@ -1,7 +1,8 @@
+import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface UserStatsProps {
   age: number;
@@ -13,90 +14,122 @@ interface UserStatsProps {
 export const UserStats = ({ age, gender, height, weight }: UserStatsProps) => {
   const { currentTheme } = useTheme();
 
+  const statItems = [
+    {
+      icon: 'calendar-month',
+      label: 'Age',
+      value: `${age}`,
+    },
+    {
+      icon: gender === 'female' ? 'gender-female' : 'gender-male',
+      label: 'Gender',
+      value: gender === 'female' ? 'female' : 'male',
+    },
+    {
+      icon: 'human-male-height',
+      label: 'Height',
+      value: `${height} cm`,
+    },
+    {
+      icon: 'weight',
+      label: 'Weight',
+      value: `${weight} kg`,
+    },
+  ];
+
   return (
-    <View style={styles.statsRow}>
-      {/* Age Stat */}
-      <View style={[styles.statBox, {
-        borderColor: currentTheme.colors.text,
-        backgroundColor: '#1c1c2e'
-      }]}>
-        <View style={styles.statIcon}>
-          <MaterialCommunityIcons name="calendar" size={20} color={currentTheme.colors.text} />
-        </View>
-        <ThemedText style={styles.statLabel}>Age</ThemedText>
-        <ThemedText style={styles.statValue}>{age || 21} years</ThemedText>
+    <View style={[styles.container, { borderColor: `${currentTheme.colors.border}30` }]}>
+      <View style={styles.header}>
+        <MaterialCommunityIcons 
+          name="card-account-details" 
+          size={20} 
+          color={currentTheme.colors.accent} 
+        />
+        <ThemedText style={styles.title}>Personal Details</ThemedText>
       </View>
       
-      {/* Gender Stat */}
-      <View style={[styles.statBox, {
-        borderColor: currentTheme.colors.accent,
-        backgroundColor: '#1c1c2e'
-      }]}>
-        <View style={[styles.statIcon, {backgroundColor: currentTheme.colors.accent + '20'}]}>
-          <MaterialCommunityIcons 
-            name={gender === 'male' ? 'gender-male' : 'gender-female'} 
-            size={20} 
-            color={currentTheme.colors.accent} 
-          />
-        </View>
-        <ThemedText style={[styles.statLabel, {color: currentTheme.colors.accent}]}>Gender</ThemedText>
-        <ThemedText style={[styles.statValue, {color: currentTheme.colors.accent}]}>{gender || 'male'}</ThemedText>
-      </View>
-      
-      {/* Height Stat */}
-      <View style={[styles.statBox, {
-        borderColor: currentTheme.colors.secondary,
-        backgroundColor: '#1c1c2e'
-      }]}>
-        <View style={[styles.statIcon, {backgroundColor: currentTheme.colors.secondary + '20'}]}>
-          <MaterialCommunityIcons name="human-male-height" size={20} color={currentTheme.colors.secondary} />
-        </View>
-        <ThemedText style={[styles.statLabel, {color: currentTheme.colors.secondary}]}>Height</ThemedText>
-        <ThemedText style={[styles.statValue, {color: currentTheme.colors.secondary}]}>{height || 178} cm</ThemedText>
-      </View>
-      
-      {/* Weight Stat */}
-      <View style={[styles.statBox, {
-        borderColor: currentTheme.colors.text,
-        backgroundColor: '#1c1c2e'
-      }]}>
-        <View style={styles.statIcon}>
-          <MaterialCommunityIcons name="weight" size={20} color={currentTheme.colors.text} />
-        </View>
-        <ThemedText style={styles.statLabel}>Weight</ThemedText>
-        <ThemedText style={styles.statValue}>{weight || 84} kg</ThemedText>
+      <View style={styles.statsGrid}>
+        {statItems.map((item, index) => (
+          <View 
+            key={index} 
+            style={[
+              styles.statItem, 
+              { 
+                backgroundColor: `${currentTheme.colors.card}70`,
+                borderColor: `${currentTheme.colors.accent}30`,
+                shadowColor: currentTheme.colors.accent,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 3,
+                elevation: 2,
+              }
+            ]}
+          >
+            <View style={[styles.iconContainer, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
+              <MaterialCommunityIcons 
+                name={item.icon} 
+                size={22} 
+                color={currentTheme.colors.accent} 
+              />
+            </View>
+            <ThemedText style={styles.label}>{item.label}</ThemedText>
+            <ThemedText style={styles.value}>{item.value}</ThemedText>
+          </View>
+        ))}
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 16,
-  },
-  statBox: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderRadius: 10,
-    width: '23%',
+  container: {
+    marginHorizontal: 16,
+    marginVertical: 10,
+    borderRadius: 16,
     borderWidth: 1,
+    overflow: 'hidden',
   },
-  statIcon: {
-    borderRadius: 10,
-    padding: 4,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 8,
+    justifyContent: 'space-between',
+  },
+  statItem: {
+    width: '48%', // 2 items per row with small gap
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '600',
+    opacity: 0.7,
     marginBottom: 4,
   },
-  statLabel: {
-    fontSize: 12,
+  value: {
+    fontSize: 16,
     fontWeight: 'bold',
-    marginVertical: 2,
   },
-  statValue: {
-    fontSize: 14,
-    textAlign: 'center',
-  }
 }); 

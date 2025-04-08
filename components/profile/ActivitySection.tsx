@@ -12,8 +12,8 @@ interface ActivitySectionProps {
   totalWorkouts: number;
   currentStreak: number;
   bestStreak: number;
-  onMonthChange: (increment: number) => void;
-  onDayPress: (date: string, count: number) => void;
+  onMonthChange: (date: Date) => void;
+  onDayPress: (date: string) => void;
 }
 
 export const ActivitySection = ({ 
@@ -28,13 +28,32 @@ export const ActivitySection = ({
 }: ActivitySectionProps) => {
   const { currentTheme } = useTheme();
 
+  // Ensure selectedMonth is always a Date object
+  const currentMonth = selectedMonth instanceof Date ? new Date(selectedMonth) : new Date();
+  
+  const handlePrevMonth = () => {
+    const prevMonth = new Date(currentMonth);
+    prevMonth.setMonth(prevMonth.getMonth() - 1);
+    onMonthChange(prevMonth);
+  };
+
+  const handleNextMonth = () => {
+    const nextMonth = new Date(currentMonth);
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    onMonthChange(nextMonth);
+  };
+
+  // Format month name and year
+  const monthName = currentMonth.toLocaleString('default', { month: 'long' });
+  const year = currentMonth.getFullYear();
+
   return (
     <View style={[styles.activitySection, { 
       backgroundColor: `${currentTheme.colors.accent}10`, 
       borderRadius: 16, 
       padding: 16,
-      marginTop: 24,
-      marginHorizontal: 16,
+      marginTop: 16,
+      marginBottom: 16,
       borderWidth: 1,
       borderColor: `${currentTheme.colors.accent}30`,
     }]}>
@@ -42,13 +61,37 @@ export const ActivitySection = ({
       <View style={[styles.activityContent, { backgroundColor: `${currentTheme.colors.accent}15`, borderRadius: 16 }]}>
         {/* Month Navigation */}
         <View style={styles.monthNav}>
-          <TouchableOpacity onPress={() => onMonthChange(-1)}>
+          <TouchableOpacity 
+            onPress={handlePrevMonth} 
+            style={[
+              styles.navButton, 
+              { 
+                backgroundColor: `${currentTheme.colors.accent}20`,
+                borderRadius: 8,
+                padding: 8,
+              }
+            ]}
+          >
             <MaterialCommunityIcons name="chevron-left" size={24} color={currentTheme.colors.accent} />
           </TouchableOpacity>
-          <ThemedText style={styles.monthText}>
-            {selectedMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
-          </ThemedText>
-          <TouchableOpacity onPress={() => onMonthChange(1)}>
+          
+          <View style={styles.monthTextContainer}>
+            <ThemedText style={[styles.monthText, { color: currentTheme.colors.accent }]}>
+              {`${monthName} ${year}`}
+            </ThemedText>
+          </View>
+          
+          <TouchableOpacity 
+            onPress={handleNextMonth} 
+            style={[
+              styles.navButton, 
+              { 
+                backgroundColor: `${currentTheme.colors.accent}20`,
+                borderRadius: 8,
+                padding: 8,
+              }
+            ]}
+          >
             <MaterialCommunityIcons name="chevron-right" size={24} color={currentTheme.colors.accent} />
           </TouchableOpacity>
         </View>
@@ -62,9 +105,9 @@ export const ActivitySection = ({
 
         {/* Workout Heatmap */}
         <WorkoutHeatmap
-          month={selectedMonth}
-          data={workoutData}
-          maxValue={maxWorkouts}
+          month={currentMonth}
+          workoutData={workoutData}
+          maxWorkouts={maxWorkouts}
           onDayPress={onDayPress}
         />
       </View>
@@ -87,12 +130,20 @@ const styles = StyleSheet.create({
   monthNav: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
   },
+  monthTextContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
   monthText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginHorizontal: 16,
+  },
+  navButton: {
+    padding: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   }
 });

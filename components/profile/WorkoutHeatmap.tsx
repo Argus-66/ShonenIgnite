@@ -1,223 +1,264 @@
-import { View, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
 
 interface WorkoutHeatmapProps {
   month: Date;
-  data: { [date: string]: number };
-  maxValue: number;
-  onDayPress?: (date: string, count: number) => void;
+  workoutData: { [date: string]: number };
+  maxWorkouts: number;
+  onDayPress: (date: string) => void;
 }
 
-export const WorkoutHeatmap = ({ month, data, maxValue, onDayPress }: WorkoutHeatmapProps) => {
+export const WorkoutHeatmap = ({
+  month,
+  workoutData,
+  maxWorkouts,
+  onDayPress
+}: WorkoutHeatmapProps) => {
   const { currentTheme } = useTheme();
-  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
+
+  // Ensure month is a Date object to avoid "month.getFullYear is not a function" error
+  const currentMonth = month instanceof Date ? month : new Date();
   
-  const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  // Get the current month's data
+  const year = currentMonth.getFullYear();
+  const monthIndex = currentMonth.getMonth(); // 0-based (0 = January, 11 = December)
+
+  // Get the first day of the month
+  const firstDay = new Date(year, monthIndex, 1);
+  const firstDayOfWeek = firstDay.getDay(); // 0 = Sunday, 1 = Monday, etc.
+
+  // Get last day of the month
+  const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+
+  // Get current date for today's highlight
+  const today = new Date();
+  const isCurrentMonth = today.getMonth() === monthIndex && today.getFullYear() === year;
+
+  // Generate calendar weeks
+  const weeks = [];
+  let currentWeek = [];
   
-  const getColor = (count: number) => {
-    if (count === 0) return `${currentTheme.colors.accent}15`;
-    const intensity = Math.min((count / maxValue) * 0.8 + 0.2, 1);
-    const color = `${currentTheme.colors.accent}${Math.floor(intensity * 255).toString(16).padStart(2, '0')}`;
-    return color;
+  // Add empty days for the first week
+  for (let i = 0; i < firstDayOfWeek; i++) {
+    currentWeek.push(null);
+  }
+  
+  // Add days of the month
+  for (let day = 1; day <= lastDay; day++) {
+    currentWeek.push(day);
+    
+    if (currentWeek.length === 7) {
+      weeks.push([...currentWeek]);
+      currentWeek = [];
+    }
+  }
+  
+  // Fill the last week with empty days
+  if (currentWeek.length > 0) {
+    while (currentWeek.length < 7) {
+      currentWeek.push(null);
+    }
+    weeks.push(currentWeek);
+  }
+
+  // Function to handle day press
+  const handleDayPress = (day: number | null) => {
+    if (day === null) return;
+    
+    // Format date string as YYYY-MM-DD, ensuring month and day are padded with zeros
+    const dateStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    console.log(`WorkoutHeatmap selected date: ${dateStr}`);
+    onDayPress(dateStr);
   };
 
-  const renderCalendar = () => {
-    const cellSize = Math.min((Dimensions.get('window').width - 150) / 7, 35);
-    const cellGap = 6;
+  // Function to get color intensity based on workout count
+  const getColorIntensity = (day: number | null) => {
+    if (day === null) return 'transparent';
     
-    // Create a 7×6 matrix representing each day cell (7 days per week, max 6 weeks)
-    const dayMatrix = Array(7).fill(null).map(() => Array(6).fill(null));
+    const dateStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const count = workoutData[dateStr] || 0;
     
-    let day = 1;
-    for (let week = 0; week < 6; week++) { // 6 possible weeks in a month view
-      for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
-        if ((week === 0 && dayOfWeek < firstDay) || day > daysInMonth) {
-          // Empty cell - before first day or after last day
-          dayMatrix[dayOfWeek][week] = null;
-        } else {
-          dayMatrix[dayOfWeek][week] = day++;
-        }
-      }
+    if (count === 0) {
+      // Light neutral background for days with no activity
+      return `${currentTheme.colors.background}80`; 
     }
     
-    // Render each row (representing a day of the week)
-    return weekDays.map((weekDayName, dayOfWeek) => {
-      // Check if this row has any days
-      if (dayMatrix[dayOfWeek].every(d => d === null)) return null;
-      
-      const dayCells = dayMatrix[dayOfWeek].map((dayNum, week) => {
-        if (dayNum === null) {
-          return (
-            <View 
-              key={`empty-${dayOfWeek}-${week}`} 
-              style={[
-                styles.dayCell, 
-                { 
-                  width: cellSize, 
-                  height: cellSize, 
-                  margin: cellGap/2,
-                  backgroundColor: 'transparent',
-                }
-              ]} 
-            />
-          );
-        }
-        
-        const date = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-        const count = data[date] || 0;
-        const color = getColor(count);
-        
-        return (
-          <TouchableOpacity
-            key={`day-${dayNum}`}
-            style={[
-              styles.dayCell,
-              {
-                width: cellSize,
-                height: cellSize,
-                margin: cellGap/2,
-                backgroundColor: color,
-                borderColor: count > 0 ? `${currentTheme.colors.accent}60` : 'transparent',
-                shadowColor: count > 0 ? color : 'transparent',
-                shadowOffset: { width: 0, height: 0 },
-                shadowOpacity: count > 0 ? 0.9 : 0,
-                shadowRadius: count > 0 ? Math.min(count * 3, 12) : 0,
-                elevation: count > 0 ? Math.min(count * 3, 12) : 0,
-              },
-            ]}
-            onPress={() => {
-              if (onDayPress) onDayPress(date, count);
-            }}
-          >
-            <ThemedText style={[
-              styles.dayText, 
-              { 
-                opacity: count > 0 ? 1 : 0.7, 
-                fontSize: cellSize * 0.4,
-                color: count > 0 ? '#FFFFFF' : `${currentTheme.colors.text}80`,
-                fontWeight: count > 0 ? 'bold' : 'normal',
-                textShadowColor: count > 0 ? color : 'transparent',
-                textShadowOffset: { width: 0, height: 0 },
-                textShadowRadius: count > 0 ? 5 : 0,
-              }
-            ]}>
-              {dayNum}
-            </ThemedText>
-          </TouchableOpacity>
-        );
-      });
-      
-      return (
-        <View key={`row-${dayOfWeek}`} style={styles.weekRow}>
-          <View style={styles.weekDayLabelContainer}>
-            <ThemedText style={[styles.weekDayLabel, { color: `${currentTheme.colors.text}80` }]}>
-              {weekDayName}
-            </ThemedText>
-          </View>
-          <View style={styles.daysRow}>
-            {dayCells}
-          </View>
-        </View>
-      );
-    }).filter(Boolean); // Remove null rows
+    // Calculate intensity based on the max workout value
+    const maxValue = Math.max(1, maxWorkouts);
+    const intensity = count / maxValue;
+    
+    // Create vibrant color intensity gradients based on theme accent color
+    if (intensity < 0.2) {
+      // Lighter shade - low intensity
+      return `${currentTheme.colors.accent}30`;
+    } else if (intensity < 0.4) {
+      // Medium-light shade
+      return `${currentTheme.colors.accent}50`;
+    } else if (intensity < 0.6) {
+      // Medium shade
+      return `${currentTheme.colors.accent}70`;
+    } else if (intensity < 0.8) {
+      // Medium-high shade
+      return `${currentTheme.colors.accent}90`;
+    } else {
+      // Highest intensity
+      return currentTheme.colors.accent;
+    }
   };
 
-  const renderColumnHeaders = () => {
-    const cellSize = Math.min((Dimensions.get('window').width - 150) / 7, 35);
-    const cellGap = 6;
+  // Enhanced shadow style for days with workouts
+  const getDayShadowStyle = (day: number | null) => {
+    if (day === null) return {};
     
-    // Calculate the number of weeks in the current month view
-    const weeksCount = Math.ceil((firstDay + daysInMonth) / 7);
+    const dateStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const count = workoutData[dateStr] || 0;
     
-    // Generate week numbers or labels
-    const weekLabels = Array(weeksCount).fill(0).map((_, i) => `W${i+1}`);
+    if (count === 0) {
+      return {}; // No shadow for days with no activity
+    }
     
-    return (
-      <View style={styles.columnHeaders}>
-        <View style={styles.weekDayLabelContainer}>
-          {/* Empty cell for the left corner where row/column headers meet */}
-        </View>
-        <View style={styles.daysRow}>
-          {weekLabels.map((label, index) => (
-            <View
-              key={`header-${index}`}
-              style={[
-                styles.columnHeader,
-                {
-                  width: cellSize,
-                  margin: cellGap/2,
-                }
-              ]}
-            >
-              <ThemedText style={[styles.columnHeaderText, { color: `${currentTheme.colors.text}80` }]}>
-                {label}
-              </ThemedText>
-            </View>
-          ))}
-        </View>
-      </View>
-    );
+    // Calculate shadow intensity based on the workout count
+    const maxValue = Math.max(1, maxWorkouts);
+    const intensity = count / maxValue;
+    
+    // Enhanced shadow effect for more visual pop using theme accent color
+    return {
+      shadowColor: currentTheme.colors.accent,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.8, // Strong shadow
+      shadowRadius: 5 + (intensity * 5), // Larger blur radius
+      elevation: 4 + Math.floor(intensity * 6), // Higher elevation for Android
+    };
   };
+
+  // Day labels
+  const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   return (
-    <View style={[
-      { 
-        width: '100%',
-        backgroundColor: `${currentTheme.colors.accent}20`,
-        borderRadius: 12,
-        padding: 16,
-        marginTop: 16 
-      }
-    ]}>
-      {renderColumnHeaders()}
-      {renderCalendar()}
+    <View style={[styles.container, {
+      backgroundColor: `${currentTheme.colors.background}90`,
+      borderWidth: 1,
+      borderColor: `${currentTheme.colors.border}40`,
+      borderRadius: 14,
+      padding: 14,
+    }]}>
+      {/* Day labels */}
+      <View style={styles.labelRow}>
+        {dayLabels.map((label, index) => (
+          <ThemedText key={`label-${index}`} style={[styles.dayLabel, {
+            color: `${currentTheme.colors.text}90`,
+            fontWeight: 'bold',
+          }]}>
+            {label}
+          </ThemedText>
+        ))}
+      </View>
+      
+      {/* Calendar grid */}
+      {weeks.map((week, weekIndex) => (
+        <View key={`week-${weekIndex}`} style={styles.week}>
+          {week.map((day, dayIndex) => {
+            const dateStr = day !== null ? `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
+            const hasWorkout = day !== null && (workoutData[dateStr] || 0) > 0;
+            const isToday = isCurrentMonth && day === today.getDate();
+            
+            return (
+              <TouchableOpacity
+                key={`day-${dayIndex}`}
+                style={[
+                  styles.day,
+                  {
+                    backgroundColor: getColorIntensity(day),
+                    borderColor: isToday ? currentTheme.colors.accent : 'transparent',
+                    borderWidth: isToday ? 2 : 0,
+                    opacity: day === null ? 0 : 1,
+                    transform: hasWorkout ? [{ scale: 1.1 }] : [],
+                  },
+                  hasWorkout && getDayShadowStyle(day),
+                  hasWorkout && styles.workoutDayGlow
+                ]}
+                onPress={() => handleDayPress(day)}
+                disabled={day === null}
+              >
+                {day !== null && (
+                  <ThemedText 
+                    style={[
+                      styles.dayText, 
+                      hasWorkout && styles.workoutDayText,
+                      isToday && [styles.todayText, { 
+                        color: hasWorkout ? '#FFFFFF' : currentTheme.colors.text, 
+                        textShadowColor: 'rgba(0, 0, 0, 0.3)',
+                        textShadowOffset: { width: 0, height: 1 },
+                        textShadowRadius: 1
+                      }]
+                    ]}
+                  >
+                    {day}
+                  </ThemedText>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ))}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  columnHeaders: {
+  container: {
+    marginTop: 16,
+    marginBottom: 12,
+    padding: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+  },
+  labelRow: {
     flexDirection: 'row',
-    marginBottom: 8,
-    alignItems: 'center'
+    justifyContent: 'space-around',
+    marginBottom: 10,
   },
-  columnHeader: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  columnHeaderText: {
+  dayLabel: {
     fontSize: 12,
-    fontWeight: '500',
+    width: 30,
+    textAlign: 'center',
+    fontWeight: '700',
+    opacity: 0.8,
   },
-  weekRow: {
+  week: {
     flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'space-around',
     marginBottom: 8,
   },
-  weekDayLabelContainer: {
-    width: 40,
-    justifyContent: 'center',
-    paddingRight: 8,
-  },
-  weekDayLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  daysRow: {
-    flexDirection: 'row',
-    flex: 1,
-  },
-  dayCell: {
-    borderRadius: 6,
+  day: {
+    width: 32,
+    height: 32,
+    borderRadius: 8, // More rounded corners for modern look
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
+    marginHorizontal: 2,
+    marginVertical: 2,
+    borderWidth: 0,
     borderColor: 'transparent',
   },
   dayText: {
-    opacity: 0.7,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600', // Slightly bolder
+    color: 'rgba(255, 255, 255, 0.85)',
+  },
+  workoutDayGlow: {
+    overflow: 'visible', // Allow shadow to expand beyond bounds
+  },
+  workoutDayText: {
+    fontWeight: '800', // Extra bold for days with workouts
+    fontSize: 14, // Larger text
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  todayText: {
+    fontWeight: '900',
   }
 }); 

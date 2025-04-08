@@ -502,6 +502,10 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 16,
   },
+  closeButton: {
+    padding: 8,
+    borderRadius: 12,
+  },
 });
 
 export default function ProfileScreen() {
@@ -537,6 +541,11 @@ export default function ProfileScreen() {
     loadUserProfile();
     loadWorkoutData();
   }, []);
+
+  useEffect(() => {
+    console.log('Selected month changed, reloading workout data');
+    loadWorkoutData();
+  }, [selectedMonth]);
 
   async function loadUserProfile() {
     if (!auth.currentUser) return;
@@ -699,6 +708,7 @@ export default function ProfileScreen() {
     if (!auth.currentUser) return;
 
     try {
+      console.log(`Loading workout data for month: ${selectedMonth.toISOString()}`);
       const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
       const progressDoc = await getDoc(progressRef);
       
@@ -709,18 +719,23 @@ export default function ProfileScreen() {
 
         Object.values(data).forEach((workoutData: any) => {
           Object.entries(workoutData).forEach(([date, progress]: [string, any]) => {
-            const progressDate = new Date(date);
-            if (
-              progressDate.getMonth() === selectedMonth.getMonth() &&
-              progressDate.getFullYear() === selectedMonth.getFullYear() &&
-              (progress.value > 0 || progress.completed)
-            ) {
-              monthData[date] = (monthData[date] || 0) + 1;
-              max = Math.max(max, monthData[date]);
+            try {
+              const progressDate = new Date(date);
+              if (
+                progressDate.getMonth() === selectedMonth.getMonth() &&
+                progressDate.getFullYear() === selectedMonth.getFullYear() &&
+                (progress.value > 0 || progress.completed)
+              ) {
+                monthData[date] = (monthData[date] || 0) + 1;
+                max = Math.max(max, monthData[date]);
+              }
+            } catch (err) {
+              console.error(`Error parsing date: ${date}`, err);
             }
           });
         });
 
+        console.log(`Found ${Object.keys(monthData).length} workout days for this month`);
         setWorkoutData(monthData);
         setMaxWorkouts(max);
 
@@ -732,113 +747,136 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleMonthChange = (increment: number) => {
-    const newDate = new Date(selectedMonth);
-    newDate.setMonth(newDate.getMonth() + increment);
-    setSelectedMonth(newDate);
+  // Format date to YYYY-MM-DD format for consistency
+  const formatDateToYYYYMMDD = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
-  const handleDayPress = async (date: string, count: number) => {
-    setSelectedDay({ date, count });
+  const handleMonthChange = (newDate: Date) => {
+    console.log(`Changing month to: ${newDate.toISOString()}`);
+    setSelectedMonth(newDate);
+    loadWorkoutData();
+  };
+
+  const handleDayPress = async (date: string) => {
+    console.log(`Day pressed: ${date}`);
+    
+    // Convert string date to Date object
+    const selectedDate = new Date(date);
     
     // Fetch workouts for the selected date
-    if (count > 0) {
-      await loadWorkoutsForDate(date);
-    }
+    await loadWorkoutsForDate(selectedDate);
   };
 
-  const loadWorkoutsForDate = async (date: string) => {
-    if (!auth.currentUser) return;
-
+  const loadWorkoutsForDate = async (date: Date) => {
     try {
-      setDayWorkouts([]); // Clear previous workouts first
+      // Format date to ISO string yyyy-mm-dd to match Firebase document IDs
+      const formattedDate = formatDateToYYYYMMDD(date);
+      console.log('Loading workouts for date:', formattedDate);
       
-      // Get workout data from daily_workout_progress instead of daily_workouts
+      if (!auth.currentUser) {
+        console.log('No authenticated user');
+        return;
+      }
+      
+      // Get all workout data from Firestore
       const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
       const progressDoc = await getDoc(progressRef);
       
-      if (progressDoc.exists()) {
-        const data = progressDoc.data();
-        const workoutsForDate: any[] = [];
-        
-        // Process all workouts for the selected date
-        Object.entries(data).forEach(([workoutName, dateEntries]: [string, any]) => {
-          if (dateEntries[date]) {
-            const workoutData = dateEntries[date];
-            
-            // Get the workout icon from the workout name
-            let icon = "dumbbell";
-            if (workoutName.includes("Running")) icon = "run";
-            else if (workoutName.includes("Cycling")) icon = "bike";
-            else if (workoutName.includes("Walking")) icon = "walk";
-            else if (workoutName.includes("Push-ups")) icon = "human";
-            else if (workoutName.includes("Squats")) icon = "human-handsdown";
-            else if (workoutName.includes("Swimming")) icon = "swim";
-            
-            // Add this workout to our list
-            workoutsForDate.push({
-              name: workoutName,
-              icon: icon,
-              value: workoutData.value,
-              unit: workoutData.unit,
-              date: workoutData.date,
-              timestamp: workoutData.timestamp,
-              completed: workoutData.completed,
-            });
-          }
-        });
-        
-        // Calculate calories for each workout
-        const workoutsWithCalories = workoutsForDate.map((workout) => {
-          let calories = 0;
-          
-          // Simple calories calculation based on workout type and duration/distance
-          if (workout.unit === 'minutes') {
-            // Time-based workouts: roughly 5-10 calories per minute depending on intensity
-            if (workout.name.includes('Running')) {
-              calories = Math.round(workout.value * 10); // Higher intensity
-            } else if (workout.name.includes('Cycling')) {
-              calories = Math.round(workout.value * 8);
-            } else if (workout.name.includes('Walking')) {
-              calories = Math.round(workout.value * 5); // Lower intensity
-            } else if (workout.name.includes('Strength') || workout.name.includes('Weight')) {
-              calories = Math.round(workout.value * 7);
-            } else {
-              calories = Math.round(workout.value * 6); // Default for time-based
-            }
-          } else if (workout.unit === 'km') {
-            // Distance-based workouts
-            if (workout.name.includes('Running')) {
-              calories = Math.round(workout.value * 70); // ~70 calories per km running
-            } else if (workout.name.includes('Cycling')) {
-              calories = Math.round(workout.value * 40); // ~40 calories per km cycling
-            } else if (workout.name.includes('Walking')) {
-              calories = Math.round(workout.value * 50); // ~50 calories per km walking
-            } else {
-              calories = Math.round(workout.value * 60); // Default
-            }
-          } else if (workout.unit === 'reps') {
-            // Rep-based workouts: roughly 0.5 calories per rep for most exercises
-            calories = Math.round(workout.value * 0.5);
-          }
-          
-          return {
-            ...workout,
-            calories
-          };
-        });
-        
-        // Sort workouts by timestamp, most recent first
-        workoutsWithCalories.sort((a, b) => b.timestamp - a.timestamp);
-        
-        setDayWorkouts(workoutsWithCalories);
-      } else {
+      if (!progressDoc.exists()) {
+        console.log('No workout data found');
         setDayWorkouts([]);
+        return;
       }
+      
+      const data = progressDoc.data();
+      const workoutsForDate: any[] = [];
+      
+      // Process all workouts for the selected date
+      Object.entries(data).forEach(([workoutType, dateEntries]: [string, any]) => {
+        if (!dateEntries) return;
+        
+        if (dateEntries[formattedDate]) {
+          const workoutData = dateEntries[formattedDate];
+          
+          // Get the workout icon based on type
+          let icon = "dumbbell";
+          if (workoutType.toLowerCase().includes("running")) icon = "run";
+          else if (workoutType.toLowerCase().includes("cycling")) icon = "bike";
+          else if (workoutType.toLowerCase().includes("walking")) icon = "walk";
+          else if (workoutType.toLowerCase().includes("push")) icon = "human";
+          else if (workoutType.toLowerCase().includes("squat")) icon = "human-handsdown";
+          else if (workoutType.toLowerCase().includes("swimming")) icon = "swim";
+          
+          // Default unit based on workout type
+          let unit = workoutData.unit || getDefaultUnitForWorkout(workoutType);
+          
+          // Add to workouts list
+          workoutsForDate.push({
+            name: workoutType,
+            icon: icon,
+            value: workoutData.value || 0,
+            unit: unit,
+            timestamp: workoutData.timestamp || Date.now(),
+            calories: calculateCalories(workoutType, workoutData.value || 0, unit),
+          });
+        }
+      });
+      
+      // Sort by timestamp (most recent first)
+      workoutsForDate.sort((a, b) => b.timestamp - a.timestamp);
+      
+      console.log(`Found ${workoutsForDate.length} workouts for date ${formattedDate}`);
+      setDayWorkouts(workoutsForDate);
+      
+      // Get workout count for this date
+      const count = workoutData[formattedDate] || workoutsForDate.length;
+      setSelectedDay({ date: formattedDate, count: count });
+      
     } catch (error) {
       console.error('Error loading workouts for date:', error);
       setDayWorkouts([]);
     }
+  };
+  
+  // Helper function to get default unit based on workout type
+  const getDefaultUnitForWorkout = (type: string): string => {
+    switch(type.toLowerCase()) {
+      case 'running':
+      case 'cycling':
+      case 'walking':
+        return 'km';
+      case 'pushups':
+      case 'situps':
+      case 'squats':
+        return 'reps';
+      case 'plank':
+        return 'minutes';
+      default:
+        return 'reps';
+    }
+  };
+  
+  // Helper function to calculate calories
+  const calculateCalories = (type: string, value: number, unit: string): number => {
+    // These are rough estimates and should be adjusted based on more accurate calculations
+    const caloriesPerUnit: Record<string, number> = {
+      running_km: 60,    // ~60 calories per km
+      cycling_km: 30,    // ~30 calories per km
+      walking_km: 45,    // ~45 calories per km
+      pushups_reps: 0.5, // ~0.5 calories per pushup
+      situps_reps: 0.25, // ~0.25 calories per situp
+      squats_reps: 0.3,  // ~0.3 calories per squat
+      plank_minutes: 5,  // ~5 calories per minute of plank
+    };
+    
+    const key = `${type.toLowerCase()}_${unit.toLowerCase()}`;
+    const caloriesPerUnitValue = caloriesPerUnit[key] || 0.2; // Default if not found
+    
+    return Math.round(value * caloriesPerUnitValue);
   };
 
   // Helper function to format date for the modal title
@@ -1171,20 +1209,61 @@ export default function ProfileScreen() {
             onRequestClose={() => setSelectedDay(null)}
           >
             <View style={styles.modalOverlay}>
-              <View style={[styles.modalContent, { backgroundColor: currentTheme.colors.card, borderRadius: 16 }]}>
+              <View style={[
+                styles.modalContent, 
+                { 
+                  backgroundColor: currentTheme.colors.card, 
+                  borderRadius: 16,
+                  borderColor: currentTheme.colors.accent,
+                  borderWidth: 1,
+                  width: '90%',
+                  maxHeight: '80%',
+                }
+              ]}>
                 <View style={styles.modalHeader}>
-                  <ThemedText style={styles.modalTitle}>
-                    {selectedDay && formatDate(selectedDay.date)}
-                  </ThemedText>
-                  <TouchableOpacity onPress={() => setSelectedDay(null)}>
-                    <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.text} />
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <MaterialCommunityIcons 
+                      name="calendar" 
+                      size={24} 
+                      color={currentTheme.colors.accent} 
+                      style={{ marginRight: 8 }} 
+                    />
+                    <ThemedText style={styles.modalTitle}>
+                      {selectedDay && formatDate(selectedDay.date)}
+                    </ThemedText>
+                  </View>
+                  <TouchableOpacity 
+                    style={[
+                      styles.closeButton, 
+                      { backgroundColor: `${currentTheme.colors.accent}20` }
+                    ]} 
+                    onPress={() => setSelectedDay(null)}
+                  >
+                    <MaterialCommunityIcons name="close" size={20} color={currentTheme.colors.text} />
                   </TouchableOpacity>
                 </View>
                 {selectedDay && (
                   <ScrollView style={{ maxHeight: 400 }}>
-                    <View style={styles.dayDetailHeader}>
-                      <MaterialCommunityIcons name="dumbbell" size={24} color={currentTheme.colors.text} />
-                      <ThemedText style={{ fontSize: 16, fontWeight: 'bold' }}>
+                    <View style={[
+                      styles.dayDetailHeader, 
+                      { 
+                        backgroundColor: `${currentTheme.colors.accent}10`,
+                        borderRadius: 8,
+                        padding: 12,
+                        marginBottom: 16,
+                      }
+                    ]}>
+                      <MaterialCommunityIcons 
+                        name="dumbbell" 
+                        size={24} 
+                        color={currentTheme.colors.accent} 
+                      />
+                      <ThemedText style={{ 
+                        fontSize: 16, 
+                        fontWeight: 'bold',
+                        marginLeft: 8,
+                        color: currentTheme.colors.accent,
+                      }}>
                         {selectedDay.count} {selectedDay.count === 1 ? 'Workout' : 'Workouts'}
                       </ThemedText>
                     </View>
@@ -1192,29 +1271,60 @@ export default function ProfileScreen() {
                     {selectedDay.count > 0 ? (
                       dayWorkouts.length > 0 ? (
                         dayWorkouts.map((workout, index) => (
-                          <View key={`day-workout-${workout.name}-${workout.timestamp}`} 
-                            style={[styles.workoutItem, { 
-                              backgroundColor: `${currentTheme.colors.card}30`,
-                              borderLeftColor: currentTheme.colors.accent 
-                            }]}
+                          <View 
+                            key={`day-workout-${workout.name}-${workout.timestamp}`} 
+                            style={[
+                              styles.workoutItem, 
+                              { 
+                                backgroundColor: `${currentTheme.colors.card}30`,
+                                borderLeftColor: currentTheme.colors.accent,
+                                borderLeftWidth: 3,
+                                borderRadius: 8,
+                                padding: 12,
+                                marginBottom: 12,
+                              }
+                            ]}
                           >
                             <View style={styles.workoutItemHeader}>
-                              <View style={[styles.workoutItemIcon, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
+                              <View style={[
+                                styles.workoutItemIcon, 
+                                { 
+                                  backgroundColor: `${currentTheme.colors.accent}20`,
+                                  width: 40,
+                                  height: 40,
+                                  borderRadius: 20,
+                                  justifyContent: 'center',
+                                  alignItems: 'center',
+                                  marginRight: 12,
+                                }
+                              ]}>
                                 <MaterialCommunityIcons 
                                   name={workout.icon || "dumbbell"} 
-                                  size={20} 
+                                  size={24} 
                                   color={currentTheme.colors.accent} 
                                 />
                               </View>
-                              <ThemedText style={{ fontSize: 16, fontWeight: 'bold' }}>{workout.name}</ThemedText>
-                            </View>
-                            <View style={styles.workoutItemDetails}>
-                              <ThemedText style={{ fontSize: 14 }}>
-                                {workout.value} {workout.unit}
-                              </ThemedText>
-                              <ThemedText style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>
-                                {workout.calories} calories
-                              </ThemedText>
+                              <View style={{ flex: 1 }}>
+                                <ThemedText style={{ fontSize: 16, fontWeight: 'bold' }}>
+                                  {workout.name}
+                                </ThemedText>
+                                <View style={{ flexDirection: 'row', marginTop: 4, alignItems: 'center' }}>
+                                  <ThemedText style={{ fontSize: 14 }}>
+                                    {workout.value} {workout.unit}
+                                  </ThemedText>
+                                  <View style={{
+                                    backgroundColor: `${currentTheme.colors.accent}20`,
+                                    paddingHorizontal: 8,
+                                    paddingVertical: 2,
+                                    borderRadius: 12,
+                                    marginLeft: 8,
+                                  }}>
+                                    <ThemedText style={{ fontSize: 12, fontWeight: '600' }}>
+                                      {workout.calories} cal
+                                    </ThemedText>
+                                  </View>
+                                </View>
+                              </View>
                             </View>
                           </View>
                         ))
@@ -1226,11 +1336,18 @@ export default function ProfileScreen() {
                       )
                     ) : (
                       <View style={styles.emptyState}>
-                        <MaterialCommunityIcons name="dumbbell" size={48} color={`${currentTheme.colors.text}50`} />
+                        <MaterialCommunityIcons 
+                          name="dumbbell" 
+                          size={64} 
+                          color={`${currentTheme.colors.text}30`} 
+                        />
                         <ThemedText style={styles.emptyStateText}>
                           No workouts on this day
                         </ThemedText>
-                        <ThemedText style={styles.emptyStateSubtext}>
+                        <ThemedText style={[
+                          styles.emptyStateSubtext, 
+                          { color: `${currentTheme.colors.text}60` }
+                        ]}>
                           Rest days are important too!
                         </ThemedText>
                       </View>
