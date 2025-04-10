@@ -1,71 +1,78 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, Text } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
+import { RankingLevel, TimePeriod } from '@/hooks/useLeaderboard';
+import { LeaderboardFilters } from './LeaderboardFilters';
 
 interface LeaderboardHeaderProps {
-  showGlobal: boolean;
-  onToggleView: () => void;
+  rankingLevel: RankingLevel;
+  timePeriod: TimePeriod;
+  onRankingLevelChange: (level: RankingLevel) => void;
+  onTimePeriodChange: (period: TimePeriod) => void;
+  currentUserLocation: {country: string, continent: string, region: string} | null;
+  onCountryChange: (country: string) => void;
+  onContinentChange: (continent: string) => void;
+  selectedCountry: string | null;
+  selectedContinent: string | null;
 }
 
 export const LeaderboardHeader = ({ 
-  showGlobal,
-  onToggleView
+  rankingLevel,
+  timePeriod,
+  onRankingLevelChange,
+  onTimePeriodChange,
+  currentUserLocation,
+  onCountryChange,
+  onContinentChange,
+  selectedCountry,
+  selectedContinent
 }: LeaderboardHeaderProps) => {
   const { currentTheme } = useTheme();
 
+  const getHeaderTitle = () => {
+    let locationLabel = '';
+    
+    if (rankingLevel === 'continental' && selectedContinent && selectedContinent !== 'Unknown') {
+      locationLabel = selectedContinent;
+    } else if (rankingLevel === 'country' && selectedCountry && selectedCountry !== 'Unknown') {
+      locationLabel = selectedCountry;
+    } else if (rankingLevel === 'regional') {
+      locationLabel = 'Regional';
+    } else if (rankingLevel === 'global') {
+      locationLabel = 'Global';
+    } else if (rankingLevel === 'followers') {
+      locationLabel = 'Following';
+    }
+    
+    return `${locationLabel} Leaderboard`;
+  };
+
+  const getSubtitle = () => {
+    const timePeriodLabel = timePeriod === 'overall' ? 'All Time' : 
+                         timePeriod === 'monthly' ? 'This Month' :
+                         timePeriod === 'weekly' ? 'This Week' : 'Today';
+    
+    return timePeriodLabel;
+  };
+
   return (
     <View style={styles.header}>
-      <ThemedText style={styles.title}>Leaderboard</ThemedText>
+      <ThemedText style={styles.title}>{getHeaderTitle()}</ThemedText>
+      <ThemedText style={styles.subtitle}>{getSubtitle()}</ThemedText>
       
-      <View style={styles.tabs}>
-        <View 
-          style={[
-            styles.tab,
-            showGlobal ? styles.activeTab : {},
-            { borderColor: currentTheme.colors.accent }
-          ]}
-          onTouchEnd={onToggleView}
-        >
-          <MaterialCommunityIcons 
-            name="earth" 
-            size={18} 
-            color={showGlobal ? currentTheme.colors.accent : currentTheme.colors.textSecondary} 
-          />
-          <ThemedText 
-            style={[
-              styles.tabText,
-              showGlobal ? { color: currentTheme.colors.accent } : {}
-            ]}
-          >
-            Global
-          </ThemedText>
-        </View>
-        
-        <View 
-          style={[
-            styles.tab,
-            !showGlobal ? styles.activeTab : {},
-            { borderColor: currentTheme.colors.accent }
-          ]}
-          onTouchEnd={onToggleView}
-        >
-          <MaterialCommunityIcons 
-            name="map-marker" 
-            size={18} 
-            color={!showGlobal ? currentTheme.colors.accent : currentTheme.colors.textSecondary} 
-          />
-          <ThemedText 
-            style={[
-              styles.tabText,
-              !showGlobal ? { color: currentTheme.colors.accent } : {}
-            ]}
-          >
-            Nearby
-          </ThemedText>
-        </View>
-      </View>
+      <LeaderboardFilters
+        currentRankingLevel={rankingLevel}
+        currentTimePeriod={timePeriod}
+        onRankingLevelChange={onRankingLevelChange}
+        onTimePeriodChange={onTimePeriodChange}
+        currentUserLocation={currentUserLocation}
+        onCountryChange={onCountryChange}
+        onContinentChange={onContinentChange}
+        selectedCountry={selectedCountry}
+        selectedContinent={selectedContinent}
+      />
     </View>
   );
 };
@@ -78,26 +85,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  subtitle: {
+    fontSize: 16,
+    opacity: 0.7,
     marginBottom: 15,
-  },
-  tabs: {
-    flexDirection: 'row',
-    marginBottom: 10,
-  },
-  tab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginRight: 10,
-  },
-  activeTab: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  tabText: {
-    marginLeft: 6,
-    fontWeight: '500',
-  },
+  }
 }); 

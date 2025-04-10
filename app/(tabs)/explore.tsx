@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Image } from 'react-native';
+import { StyleSheet, View, SafeAreaView, TextInput, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -7,7 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { auth, db } from '@/config/firebase';
 import { collection, query, getDocs, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { router } from 'expo-router';
-import getProfileImageByTheme from '@/utils/profileImages';
+import ProfileImage from '@/components/ProfileImage';
 
 interface UserData {
   id: string;
@@ -224,10 +224,9 @@ export default function ExploreScreen() {
     >
       <View style={styles.userInfo}>
         <View style={[styles.userAvatar, { borderColor: currentTheme.colors.accent }]}>
-          <Image 
-            source={getProfileImageByTheme(item.theme)}
-            style={styles.avatarImage}
-            resizeMode="cover"
+          <ProfileImage 
+            themeName={item.theme || 'Dragon Ball'}
+            size={50}
           />
         </View>
         <View>
@@ -385,10 +384,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     marginRight: 12,
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
   },
   username: {
     fontSize: 16,

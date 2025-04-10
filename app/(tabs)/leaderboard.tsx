@@ -7,24 +7,38 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LeaderboardHeader } from '@/components/leaderboard/LeaderboardHeader';
 import { LeaderboardList } from '@/components/leaderboard/LeaderboardList';
 import { LocationPermission } from '@/components/leaderboard/LocationPermission';
-import { useLeaderboard } from '@/hooks/useLeaderboard';
+import useLeaderboard, { RankingLevel, TimePeriod } from '@/hooks/useLeaderboard';
 import { saveUserLocation } from '@/utils/locationService';
+import { updateCurrentUserXpCalc } from '@/utils/xpCalcService';
+import { useRouter } from 'expo-router';
+import { auth } from '@/config/firebase';
+import { LeaderboardUser } from '@/components/leaderboard/LeaderboardItem';
 
 export default function LeaderboardScreen() {
   const { currentTheme } = useTheme();
+  const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [locationPermission, setLocationPermission] = useState<Location.PermissionStatus | null>(null);
   const [hasCheckedPermission, setHasCheckedPermission] = useState(false);
-  const [showGlobal, setShowGlobal] = useState(true);
   
   const { 
-    globalUsers, 
-    nearbyUsers, 
+    users: leaderboardData,
     loading,
     error,
-    currentUserId,
-    refreshLeaderboard 
+    noUsersFound,
+    currentRankingLevel,
+    currentTimePeriod,
+    selectedContinent,
+    selectedCountry,
+    hasLocationPermission,
+    changeRankingLevel,
+    changeTimePeriod,
+    changeSelectedCountry,
+    changeSelectedContinent,
+    toggleFollowUser: handleFollowToggle
   } = useLeaderboard();
+
+  const currentUserId = auth.currentUser?.uid || '';
 
   // Function to request location permission and get location
   const requestLocationPermission = async () => {
@@ -51,6 +65,8 @@ export default function LeaderboardScreen() {
         const success = await saveUserLocation();
         if (success) {
           await AsyncStorage.setItem('hasLocationStored', 'true');
+          // Update the xpCalc collection with location data
+          await updateCurrentUserXpCalc();
         }
       }
       
@@ -74,17 +90,49 @@ export default function LeaderboardScreen() {
       await requestLocationPermission();
     }
     
-    await refreshLeaderboard();
+    // Update xpCalc data to ensure it's current
+    await updateCurrentUserXpCalc();
+    
     setRefreshing(false);
-  }, [locationPermission, refreshLeaderboard]);
+  }, [locationPermission]);
 
   const handleUserPress = (userId: string) => {
-    // Navigate to user profile or show user details
-    console.log(`Pressed user with ID: ${userId}`);
+    // Navigate to user profile
+    router.push(`/profile/${userId}` as const);
   };
 
-  const toggleView = () => {
-    setShowGlobal(!showGlobal);
+  const handleRankingTypeChange = (level: RankingLevel) => {
+    changeRankingLevel(level);
+  };
+
+  const handleTimePeriodChange = (period: TimePeriod) => {
+    changeTimePeriod(period);
+  };
+
+  const handleCountryChange = (country: string) => {
+    // First ensure we're on the country ranking level, then update the selected country
+    changeRankingLevel('country');
+    // Short delay to ensure ranking level change is processed first
+    setTimeout(() => {
+      changeSelectedCountry(country);
+    }, 100);
+  };
+
+  const handleContinentChange = (continent: string) => {
+    // First ensure we're on the continental ranking level, then update the selected continent
+    changeRankingLevel('continental');
+    // Short delay to ensure ranking level change is processed first
+    setTimeout(() => {
+      changeSelectedContinent(continent);
+    }, 100);
+  };
+
+  const isLocationNeeded = () => {
+    return currentRankingLevel === 'regional' && !hasLocationPermission;
+  };
+
+  const toggleFollowUser = async (userId: string) => {
+    await handleFollowToggle(userId);
   };
 
   return (
@@ -95,38 +143,46 @@ export default function LeaderboardScreen() {
       />
       <ThemedView style={styles.container}>
         <LeaderboardHeader 
-          showGlobal={showGlobal} 
-          onToggleView={toggleView} 
+          rankingLevel={currentRankingLevel}
+          timePeriod={currentTimePeriod}
+          onRankingLevelChange={handleRankingTypeChange}
+          onTimePeriodChange={handleTimePeriodChange}
+          currentUserLocation={null} // This will be fetched from the xpCalc collection
+          onCountryChange={handleCountryChange} 
+          onContinentChange={handleContinentChange}
+          selectedCountry={selectedCountry}
+          selectedContinent={selectedContinent}
         />
         
         {!hasCheckedPermission ? (
           <View style={styles.contentContainer}>
             {/* Loading state handled by LeaderboardList */}
           </View>
-        ) : locationPermission !== 'granted' && !showGlobal ? (
+        ) : isLocationNeeded() ? (
           <LocationPermission onRequestPermission={requestLocationPermission} />
         ) : (
-          <View style={styles.contentContainer}>
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  colors={[currentTheme.colors.accent]}
-                  tintColor={currentTheme.colors.accent}
-                />
-              }
-            >
-              <LeaderboardList
-                users={showGlobal ? globalUsers : nearbyUsers}
-                currentUserId={currentUserId || ''}
-                loading={loading}
-                onUserPress={handleUserPress}
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[currentTheme.colors.accent]}
+                tintColor={currentTheme.colors.accent}
               />
-            </ScrollView>
-          </View>
+            }
+          >
+            <LeaderboardList
+              users={leaderboardData}
+              currentUserId={currentUserId}
+              loading={loading}
+              error={error}
+              noUsersFound={noUsersFound}
+              onUserPress={handleUserPress}
+              onFollowToggle={toggleFollowUser}
+            />
+          </ScrollView>
         )}
       </ThemedView>
     </SafeAreaView>
@@ -149,5 +205,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 20
   },
 }); 

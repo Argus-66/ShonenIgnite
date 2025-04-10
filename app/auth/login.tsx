@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View, TextInput, TouchableOpacity, Image } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
@@ -108,6 +108,12 @@ export default function LoginPage() {
             <TouchableOpacity onPress={() => router.push('/auth/signup')}>
               <ThemedText style={[styles.link, { color: currentTheme.colors.textSecondary }]}>
                 Don't have an account? Sign up
+              </ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => router.push('/auth/reset-password')}>
+              <ThemedText style={[styles.link, { color: currentTheme.colors.textSecondary }]}>
+                Forgot Password?
               </ThemedText>
             </TouchableOpacity>
           </View>

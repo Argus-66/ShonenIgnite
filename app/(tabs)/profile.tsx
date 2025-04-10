@@ -1,19 +1,21 @@
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, TouchableOpacity, SafeAreaView, Modal, TextInput, ScrollView, StatusBar, RefreshControl, Image } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useTheme, Theme } from '@/contexts/ThemeContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { auth, db } from '@/config/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { router } from 'expo-router';
-import { Theme, themes } from '@/constants/Themes';
+import { themes } from '@/constants/Themes';
 import { ActivitySection } from '@/components/profile/ActivitySection';
 import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { UserStats } from '@/components/profile/UserStats';
 import { BioSection } from '@/components/profile/BioSection';
 import { ThemeSelector } from '@/components/profile/ThemeSelector';
 import getProfileImageByTheme from '@/utils/profileImages';
+import ProfileImage from '@/components/ProfileImage';
 
 interface UserProfile {
   username: string;
@@ -1405,10 +1407,9 @@ export default function ProfileScreen() {
                       >
                         <View style={styles.userListItemLeft}>
                           <View style={[styles.userAvatar, { borderColor: currentTheme.colors.accent }]}>
-                            <Image 
-                              source={getProfileImageByTheme(follower.theme)}
-                              style={styles.userAvatarImage}
-                              resizeMode="cover"
+                            <ProfileImage 
+                              themeName={follower.theme || 'Dragon Ball'}
+                              size={40}
                             />
                           </View>
                           <ThemedText style={styles.userListItemName}>{follower.username}</ThemedText>
@@ -1475,10 +1476,9 @@ export default function ProfileScreen() {
                       >
                         <View style={styles.userListItemLeft}>
                           <View style={[styles.userAvatar, { borderColor: currentTheme.colors.accent }]}>
-                            <Image 
-                              source={getProfileImageByTheme(following.theme)}
-                              style={styles.userAvatarImage}
-                              resizeMode="cover"
+                            <ProfileImage 
+                              themeName={following.theme || 'Dragon Ball'}
+                              size={40}
                             />
                           </View>
                           <ThemedText style={styles.userListItemName}>{following.username}</ThemedText>

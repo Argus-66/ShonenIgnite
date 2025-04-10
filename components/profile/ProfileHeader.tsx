@@ -1,9 +1,10 @@
-import { View, TouchableOpacity, StyleSheet, Image, Modal } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Image, Modal, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
-import getProfileImageByTheme from '@/utils/profileImages';
-import { useState } from 'react';
+import { getProfileImageByThemeSync, getProfileImageByTheme } from '@/utils/profileImages';
+import { useState, useEffect } from 'react';
+import { ImageSourcePropType } from 'react-native';
 
 interface ProfileHeaderProps {
   username: string;
@@ -27,8 +28,34 @@ export const ProfileHeader = ({
   themeName = 'default'
 }: ProfileHeaderProps) => {
   const { currentTheme } = useTheme();
-  const profileImage = getProfileImageByTheme(themeName);
+  const [profileImage, setProfileImage] = useState<ImageSourcePropType>(getProfileImageByThemeSync(themeName));
+  const [isImageLoading, setIsImageLoading] = useState(true);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    
+    const loadImage = async () => {
+      try {
+        const image = await getProfileImageByTheme(themeName);
+        if (isMounted) {
+          setProfileImage(image);
+          setIsImageLoading(false);
+        }
+      } catch (error) {
+        console.error('Error loading profile image:', error);
+        if (isMounted) {
+          setIsImageLoading(false);
+        }
+      }
+    };
+    
+    loadImage();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [themeName]);
 
   return (
     <View style={[styles.container, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
@@ -44,11 +71,17 @@ export const ProfileHeader = ({
             onPress={() => setImageViewerVisible(true)}
             activeOpacity={0.8}
           >
-            <Image 
-              source={profileImage}
-              style={styles.avatar}
-              resizeMode="cover"
-            />
+            {isImageLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator color={currentTheme.colors.accent} />
+              </View>
+            ) : (
+              <Image 
+                source={profileImage}
+                style={styles.avatar}
+                resizeMode="cover"
+              />
+            )}
           </TouchableOpacity>
           <ThemedText style={styles.username}>
             {username || 'User'}
@@ -141,6 +174,13 @@ const styles = StyleSheet.create({
   avatar: {
     width: '100%',
     height: '100%',
+  },
+  loadingContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
   username: {
     fontSize: 18,

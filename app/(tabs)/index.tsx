@@ -11,6 +11,7 @@ import { WorkoutProgress, UserStats, calculateLevel } from '@/types/workout';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { FontAwesome } from '@expo/vector-icons';
 import { Link, router } from 'expo-router';
+import { updateXpCalcData } from '@/utils/xpCalcService';
 
 interface DashboardStats {
   username: string;
@@ -389,6 +390,9 @@ export default function DashboardScreen() {
         console.log("XP values unchanged, not updating database");
       }
       
+      // Update xpCalc collection
+      await updateXpCalcData(auth.currentUser.uid);
+
       return { totalXP, dailyXP };
     } catch (error) {
       console.error("Error calculating XP:", error);
@@ -667,6 +671,8 @@ export default function DashboardScreen() {
         console.log("Daily XP limit of 100 reached!");
         setShowXPLimitToast(true);
       }
+
+      // Update xpCalc collection
     } catch (error) {
       console.error('Error updating user XP:', error);
     }

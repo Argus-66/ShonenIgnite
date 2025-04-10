@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
-import { StyleSheet, View, TouchableOpacity, SafeAreaView, ScrollView, Image, Modal } from 'react-native';
-import { useLocalSearchParams, router } from 'expo-router';
-import { ThemedText } from '@/components/ThemedText';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Image, SafeAreaView, Modal, Platform, StatusBar } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { auth, db } from '@/config/firebase';
-import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, collection } from 'firebase/firestore';
-import { ActivitySection } from '@/components/profile/ActivitySection';
-import { BioSection } from '@/components/profile/BioSection';
+import { db, auth } from '@/config/firebase';
+import { collection, query, doc, getDoc, getDocs, updateDoc, where, orderBy, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
+import { format, parseISO, isValid } from 'date-fns';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import getProfileImageByTheme from '@/utils/profileImages';
+import { ActivitySection } from '@/components/profile/ActivitySection';
+import ProfileImage from '@/components/ProfileImage';
 
 interface UserProfile {
   username: string;
@@ -42,6 +43,7 @@ export default function UserProfileScreen() {
   const [showFollowingModal, setShowFollowingModal] = useState(false);
   const [followersList, setFollowersList] = useState<any[]>([]);
   const [followingList, setFollowingList] = useState<any[]>([]);
+  const router = useRouter();
 
   useEffect(() => {
     loadUserProfile();
@@ -765,10 +767,9 @@ export default function UserProfileScreen() {
                   >
                     <View style={styles.userItemLeft}>
                       <View style={[styles.userAvatar, { borderColor: currentTheme.colors.accent }]}>
-                        <Image 
-                          source={getProfileImageByTheme(follower.theme)}
-                          style={styles.userAvatarImage}
-                          resizeMode="cover"
+                        <ProfileImage 
+                          themeName={follower.theme || 'Dragon Ball'}
+                          size={40}
                         />
                       </View>
                       <ThemedText style={styles.username}>{follower.username}</ThemedText>
@@ -842,10 +843,9 @@ export default function UserProfileScreen() {
                   >
                     <View style={styles.userItemLeft}>
                       <View style={[styles.userAvatar, { borderColor: currentTheme.colors.accent }]}>
-                        <Image 
-                          source={getProfileImageByTheme(following.theme)}
-                          style={styles.userAvatarImage}
-                          resizeMode="cover"
+                        <ProfileImage 
+                          themeName={following.theme || 'Dragon Ball'}
+                          size={40}
                         />
                       </View>
                       <ThemedText style={styles.username}>{following.username}</ThemedText>
@@ -1156,10 +1156,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     marginRight: 12,
-  },
-  userAvatarImage: {
-    width: '100%',
-    height: '100%',
   },
   emptyList: {
     alignItems: 'center',

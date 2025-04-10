@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { auth } from '@/config/firebase';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { preloadThemeImages } from '@/utils/profileImages';
 
 export default function RootLayout() {
   useEffect(() => {
@@ -17,6 +18,18 @@ export default function RootLayout() {
         router.replace('/login');
       }
     });
+
+    // Preload theme images
+    const loadThemeImages = async () => {
+      try {
+        await preloadThemeImages();
+        console.log('Theme images preloaded successfully');
+      } catch (error) {
+        console.error('Error preloading theme images:', error);
+      }
+    };
+    
+    loadThemeImages();
 
     // Cleanup subscription on unmount
     return () => unsubscribe();

@@ -47,7 +47,7 @@ export default function LandingPage() {
         />
         
         <ThemedText style={titleStyle}>
-          FitnessFreak
+          ShonenIgnite
         </ThemedText>
         <ThemedText style={subtitleStyle}>
           Level Up Your Fitness Journey

@@ -1,83 +1,120 @@
 import React from 'react';
-import { StyleSheet, View, Image, TouchableOpacity } from 'react-native';
-import { ThemedText } from '@/components/ThemedText';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { StyleSheet, View, Text, Image, TouchableOpacity } from 'react-native';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
+import { ThemedText } from '@/components/ThemedText';
 
 export interface LeaderboardUser {
   id: string;
   username: string;
-  profileImage: string;
+  profileImage: any;
   level: number;
   xp: number;
   rank: number;
-  distance?: number; // Only for nearby users
+  currentXp?: number;
+  xpForNextLevel?: number;
+  isFollowed?: boolean;
+  distance?: number; // We'll keep this in the type but not display it
 }
 
 interface LeaderboardItemProps {
   user: LeaderboardUser;
   isCurrentUser: boolean;
   onPress: (userId: string) => void;
+  onFollowToggle: (userId: string) => void;
 }
 
-export const LeaderboardItem = ({ 
-  user, 
-  isCurrentUser,
-  onPress 
-}: LeaderboardItemProps) => {
+export const LeaderboardItem = ({ user, isCurrentUser, onPress, onFollowToggle }: LeaderboardItemProps) => {
   const { currentTheme } = useTheme();
-
-  const getRankStyle = () => {
-    if (user.rank === 1) return { color: '#FFD700' }; // Gold
-    if (user.rank === 2) return { color: '#C0C0C0' }; // Silver
-    if (user.rank === 3) return { color: '#CD7F32' }; // Bronze
-    return {};
-  };
-
+  
+  // Format the XP value with commas
+  const formattedXP = user.xp.toLocaleString();
+  
+  // Calculate the progress percentage for the XP bar
+  const progressPercentage = user.xpForNextLevel && user.xpForNextLevel > 0 
+    ? (user.currentXp || 0) / user.xpForNextLevel * 100 
+    : 0;
+  
   return (
     <TouchableOpacity 
       style={[
         styles.container, 
-        isCurrentUser && { backgroundColor: `${currentTheme.colors.accent}20` },
+        isCurrentUser && { 
+          backgroundColor: currentTheme.colors.cardHighlight,
+          borderColor: currentTheme.colors.accent,
+          borderWidth: 2
+        }
       ]}
       onPress={() => onPress(user.id)}
     >
-      <View style={styles.rankContainer}>
-        <ThemedText style={[styles.rank, getRankStyle()]}>
-          {user.rank}
-        </ThemedText>
+      {/* Rank Circle */}
+      <View style={[styles.rankCircle, { backgroundColor: currentTheme.colors.accent }]}>
+        <ThemedText style={styles.rankText}>{user.rank}</ThemedText>
       </View>
       
-      <Image 
-        source={{ uri: user.profileImage }} 
-        style={styles.profileImage} 
-      />
+      {/* Profile Image */}
+      <Image source={user.profileImage} style={styles.profileImage} />
       
+      {/* User Info */}
       <View style={styles.userInfo}>
-        <ThemedText style={styles.username}>
-          {user.username}
-          {isCurrentUser && <ThemedText style={styles.youLabel}> (You)</ThemedText>}
-        </ThemedText>
-        
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <MaterialCommunityIcons name="star" size={14} color={currentTheme.colors.accent} />
-            <ThemedText style={styles.statText}>Level {user.level}</ThemedText>
-          </View>
-          
-          <View style={styles.stat}>
-            <MaterialCommunityIcons name="lightning-bolt" size={14} color={currentTheme.colors.accent} />
-            <ThemedText style={styles.statText}>{user.xp} XP</ThemedText>
-          </View>
-          
-          {user.distance !== undefined && (
-            <View style={styles.stat}>
-              <MaterialCommunityIcons name="map-marker-distance" size={14} color={currentTheme.colors.accent} />
-              <ThemedText style={styles.statText}>{user.distance.toFixed(1)} km</ThemedText>
-            </View>
-          )}
+        <View style={styles.nameContainer}>
+          <ThemedText style={styles.username}>
+            {user.username}
+            {isCurrentUser && <Text style={{color: currentTheme.colors.accent}}> (You)</Text>}
+          </ThemedText>
         </View>
+        
+        <View style={styles.statsContainer}>
+          <View style={styles.levelContainer}>
+            <FontAwesome5 name="star" size={14} color={currentTheme.colors.gold} />
+            <ThemedText style={styles.levelText}>Level {user.level}</ThemedText>
+          </View>
+          
+          <View style={styles.xpContainer}>
+            <FontAwesome5 name="bolt" size={14} color={currentTheme.colors.accent} />
+            <ThemedText style={styles.xpText}>{formattedXP} XP</ThemedText>
+          </View>
+        </View>
+        
+        {/* Progress Bar */}
+        {user.xpForNextLevel !== undefined && user.xpForNextLevel > 0 && (
+          <View style={[styles.progressBarContainer, { backgroundColor: currentTheme.colors.cardSecondary }]}>
+            <View 
+              style={[
+                styles.progressBar, 
+                { 
+                  width: `${progressPercentage}%`, 
+                  backgroundColor: currentTheme.colors.accent 
+                }
+              ]} 
+            />
+            <ThemedText style={styles.progressText}>
+              {user.currentXp}/{user.xpForNextLevel} XP
+            </ThemedText>
+          </View>
+        )}
       </View>
+      
+      {/* Follow Button (don't show for current user) */}
+      {!isCurrentUser && (
+        <TouchableOpacity 
+          style={[
+            styles.followButton, 
+            { 
+              backgroundColor: user.isFollowed 
+                ? currentTheme.colors.cardSecondary 
+                : currentTheme.colors.accent 
+            }
+          ]}
+          onPress={() => onFollowToggle(user.id)}
+        >
+          <Ionicons 
+            name={user.isFollowed ? "person-remove" : "person-add"} 
+            size={16} 
+            color={user.isFollowed ? currentTheme.colors.text : currentTheme.colors.white} 
+          />
+        </TouchableOpacity>
+      )}
     </TouchableOpacity>
   );
 };
@@ -85,52 +122,96 @@ export const LeaderboardItem = ({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
+    padding: 16,
     marginHorizontal: 16,
-    marginVertical: 6,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  rankContainer: {
-    width: 30,
+    marginVertical: 8,
+    borderRadius: 16,
     alignItems: 'center',
+    backgroundColor: '#1A1A1A',
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  rank: {
+  rankCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  rankText: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: 'white'
   },
   profileImage: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    marginHorizontal: 12,
+    marginRight: 12,
   },
   userInfo: {
     flex: 1,
   },
-  username: {
-    fontSize: 16,
-    fontWeight: '600',
+  nameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 4,
   },
-  youLabel: {
-    fontWeight: 'normal',
-    opacity: 0.7,
+  username: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
-  statsRow: {
+  statsContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    marginBottom: 8,
   },
-  stat: {
+  levelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginRight: 12,
-    marginBottom: 2,
   },
-  statText: {
-    fontSize: 13,
+  levelText: {
+    fontSize: 14,
     marginLeft: 4,
-    opacity: 0.8,
+  },
+  xpContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  xpText: {
+    fontSize: 14,
+    marginLeft: 4,
+  },
+  progressBarContainer: {
+    height: 16,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  progressBar: {
+    height: '100%',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+  },
+  progressText: {
+    fontSize: 10,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  followButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
 }); 

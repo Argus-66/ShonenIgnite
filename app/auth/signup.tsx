@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View, TextInput, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
