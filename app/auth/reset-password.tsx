@@ -60,7 +60,7 @@ export default function ResetPasswordPage() {
       <View style={styles.content}>
         <View style={styles.logoContainer}>
           <Image
-            source={require('@/assets/images/logo.png')}
+            source={require('@/assets/images/applogo.png')}
             style={styles.logo}
             resizeMode="contain"
           />

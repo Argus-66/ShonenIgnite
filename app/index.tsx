@@ -41,7 +41,7 @@ export default function LandingPage() {
     <ThemedView style={containerStyle}>
       <View style={styles.content}>
         <Image
-          source={require('@/assets/images/logo.png')}
+          source={require('@/assets/images/applogo.png')}
           style={styles.logo}
           resizeMode="contain"
         />

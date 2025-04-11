@@ -8,6 +8,7 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Picker } from '@react-native-picker/picker';
+import { saveAuthToken, saveUserData } from '@/utils/authService';
 
 export default function SignupPage() {
   const { currentTheme } = useTheme();
@@ -37,6 +38,18 @@ export default function SignupPage() {
         formData.email,
         formData.password
       );
+
+      // Get the user token and save it
+      const token = await userCredential.user.getIdToken();
+      await saveAuthToken(token);
+      
+      // Save basic user data
+      const userAuthData = {
+        uid: userCredential.user.uid,
+        email: userCredential.user.email,
+        displayName: formData.username,
+      };
+      await saveUserData(userAuthData);
 
       // Create user profile in Firestore
       const userData = {
@@ -114,7 +127,7 @@ export default function SignupPage() {
           <View style={styles.form}>
             <View style={styles.logoContainer}>
               <Image
-                source={require('@/assets/images/logo.png')}
+                source={require('@/assets/images/applogo.png')}
                 style={styles.logo}
                 resizeMode="contain"
               />

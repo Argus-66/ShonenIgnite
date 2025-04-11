@@ -6,6 +6,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { auth } from '@/config/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useTheme } from '@/contexts/ThemeContext';
+import { saveAuthToken, saveUserData } from '@/utils/authService';
 
 export default function LoginPage() {
   const { currentTheme } = useTheme();
@@ -25,7 +26,28 @@ export default function LoginPage() {
     try {
       setLoading(true);
       setError('');
-      await signInWithEmailAndPassword(auth, formData.email, formData.password);
+      
+      // Sign in with Firebase
+      const userCredential = await signInWithEmailAndPassword(
+        auth, 
+        formData.email, 
+        formData.password
+      );
+      
+      // Get the user token and save it
+      const token = await userCredential.user.getIdToken();
+      await saveAuthToken(token);
+      
+      // Save basic user data
+      const userData = {
+        uid: userCredential.user.uid,
+        email: userCredential.user.email,
+        displayName: userCredential.user.displayName,
+        photoURL: userCredential.user.photoURL,
+      };
+      await saveUserData(userData);
+      
+      // Navigate to main app
       router.replace('/(tabs)');
     } catch (err: any) {
       setError(err.message);
