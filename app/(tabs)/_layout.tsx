@@ -19,14 +19,14 @@ export default function TabLayout() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: currentTheme.colors.background }}>
+    <View style={{ flex: 1, backgroundColor: '#121212' }}>
       <StatusBar style="light" />
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: currentTheme.colors.accent,
           tabBarInactiveTintColor: currentTheme.colors.textSecondary,
           tabBarStyle: {
-            backgroundColor: currentTheme.colors.background,
+            backgroundColor: '#121212',
             borderTopColor: currentTheme.colors.border,
             borderTopWidth: 1,
             height: 60,
@@ -34,6 +34,7 @@ export default function TabLayout() {
             paddingTop: 8,
           },
           headerShown: false,
+          contentStyle: { backgroundColor: '#121212' },
         }}>
         <Tabs.Screen
           name="index"

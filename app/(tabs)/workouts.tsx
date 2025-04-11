@@ -1,4 +1,4 @@
-import { StyleSheet, View, ScrollView, TouchableOpacity, Platform, StatusBar, Modal, TextInput, RefreshControl } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, Platform, StatusBar, Modal, TextInput, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -102,9 +102,11 @@ export default function WorkoutsScreen() {
   const [exerciseValue, setExerciseValue] = useState('');
   const [todayWorkouts, setTodayWorkouts] = useState<Exercise[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadTodayWorkouts();
+    setLoading(true);
+    loadTodayWorkouts().finally(() => setLoading(false));
   }, []);
 
   const loadTodayWorkouts = async () => {
@@ -306,6 +308,24 @@ export default function WorkoutsScreen() {
     setRefreshing(false);
   }, []);
 
+  // Only show full loading screen during initial load, not during refresh
+  if (loading && !refreshing) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: '#121212' }]}>
+        <StatusBar
+          barStyle="light-content"
+          backgroundColor="#121212"
+        />
+        <ThemedView style={[styles.container, { backgroundColor: '#121212' }]}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={currentTheme.colors.accent} />
+            <ThemedText style={{ marginTop: 12 }}>Loading workouts...</ThemedText>
+          </View>
+        </ThemedView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
       <StatusBar
@@ -321,6 +341,7 @@ export default function WorkoutsScreen() {
             onRefresh={onRefresh}
             colors={[currentTheme.colors.accent]}
             tintColor={currentTheme.colors.accent}
+            progressBackgroundColor={currentTheme.colors.background}
           />
         }
       >
@@ -734,5 +755,10 @@ const styles = StyleSheet.create({
   exerciseAdded: {
     fontSize: 12,
     marginTop: 2,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 }); 

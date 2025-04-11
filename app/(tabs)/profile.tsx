@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, TouchableOpacity, SafeAreaView, Modal, TextInput, ScrollView, StatusBar, RefreshControl, Image } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, SafeAreaView, Modal, TextInput, ScrollView, StatusBar, RefreshControl, Image, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme, Theme } from '@/contexts/ThemeContext';
@@ -968,11 +968,18 @@ export default function ProfileScreen() {
     );
   }
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
-        <ThemedView style={styles.container}>
-          <ThemedText>Loading profile...</ThemedText>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: '#121212' }]}>
+        <StatusBar
+          barStyle="light-content"
+          backgroundColor="#121212"
+        />
+        <ThemedView style={[styles.container, { backgroundColor: '#121212' }]}>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={currentTheme.colors.accent} />
+            <ThemedText style={{ marginTop: 12 }}>Loading profile...</ThemedText>
+          </View>
         </ThemedView>
       </SafeAreaView>
     );
@@ -1030,6 +1037,7 @@ export default function ProfileScreen() {
             onRefresh={onRefresh}
             colors={[currentTheme.colors.accent]}
             tintColor={currentTheme.colors.accent}
+            progressBackgroundColor={currentTheme.colors.background}
           />
         }
       >

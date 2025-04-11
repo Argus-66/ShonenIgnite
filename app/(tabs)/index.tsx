@@ -1,4 +1,4 @@
-import { StyleSheet, View, TouchableOpacity, ScrollView, Platform, StatusBar, Modal, TextInput, Animated, Dimensions, Text, RefreshControl } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ScrollView, Platform, StatusBar, Modal, TextInput, Animated, Dimensions, Text, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -1459,12 +1459,20 @@ export default function DashboardScreen() {
     }
   };
 
-  if (loading || !stats) {
+  // Only show full loading screen during initial load (not during refresh)
+  if (loading && !refreshing && !stats) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.container}>
-          <ThemedText>Loading dashboard...</ThemedText>
-      </ThemedView>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: '#121212' }]}>
+        <StatusBar
+          barStyle="light-content"
+          backgroundColor="#121212"
+        />
+        <ThemedView style={[styles.container, { backgroundColor: '#121212' }]}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={currentTheme.colors.accent} />
+            <ThemedText style={{ marginTop: 12 }}>Loading dashboard...</ThemedText>
+          </View>
+        </ThemedView>
       </SafeAreaView>
     );
   }
@@ -1485,6 +1493,7 @@ export default function DashboardScreen() {
             onRefresh={onRefresh}
             colors={[currentTheme.colors.accent]}
             tintColor={currentTheme.colors.accent}
+            progressBackgroundColor={currentTheme.colors.background}
           />
         }
       >
@@ -1978,5 +1987,10 @@ const styles = StyleSheet.create({
   },
   additionalWorkoutsScrollView: {
     height: 200, // Fixed height to show approximately 2 workouts
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
