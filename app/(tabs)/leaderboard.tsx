@@ -15,7 +15,7 @@ import { auth } from '@/config/firebase';
 import { LeaderboardUser } from '@/components/leaderboard/LeaderboardItem';
 
 export default function LeaderboardScreen() {
-  const { currentTheme } = useTheme();
+  const { currentTheme, isDarkMode } = useTheme();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [locationPermission, setLocationPermission] = useState<Location.PermissionStatus | null>(null);
@@ -138,54 +138,56 @@ export default function LeaderboardScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
       <StatusBar
-        barStyle="light-content"
+        barStyle={isDarkMode ? "light-content" : "dark-content"}
         backgroundColor={currentTheme.colors.background}
       />
-      <ThemedView style={styles.container}>
-        {!hasCheckedPermission ? (
-          <View style={styles.contentContainer}>
-            {/* Loading state handled by LeaderboardList */}
-          </View>
-        ) : isLocationNeeded() ? (
-          <LocationPermission onRequestPermission={requestLocationPermission} />
-        ) : (
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={[currentTheme.colors.accent]}
-                tintColor={currentTheme.colors.accent}
-                progressBackgroundColor={currentTheme.colors.background}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ flexGrow: 1 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[currentTheme.colors.accent]}
+            tintColor={currentTheme.colors.accent}
+            progressBackgroundColor={currentTheme.colors.background}
+          />
+        }
+      >
+        <ThemedView style={styles.container}>
+          <LeaderboardHeader 
+            rankingLevel={currentRankingLevel}
+            timePeriod={currentTimePeriod}
+            onRankingLevelChange={handleRankingTypeChange}
+            onTimePeriodChange={handleTimePeriodChange}
+            currentUserLocation={null} // This will be fetched from the xpCalc collection
+            onCountryChange={handleCountryChange} 
+            onContinentChange={handleContinentChange}
+            selectedCountry={selectedCountry}
+            selectedContinent={selectedContinent}
+          />
+          
+          {!hasCheckedPermission ? (
+            <View style={styles.contentContainer}>
+              {/* Loading state handled by LeaderboardList */}
+            </View>
+          ) : isLocationNeeded() ? (
+            <LocationPermission onRequestPermission={requestLocationPermission} />
+          ) : (
+            <View style={{ flex: 1 }}>
+              <LeaderboardList
+                users={leaderboardData}
+                currentUserId={currentUserId}
+                loading={loading}
+                error={error}
+                noUsersFound={noUsersFound}
+                onUserPress={handleUserPress}
+                onFollowToggle={toggleFollowUser}
               />
-            }
-          >
-            <LeaderboardHeader 
-              rankingLevel={currentRankingLevel}
-              timePeriod={currentTimePeriod}
-              onRankingLevelChange={handleRankingTypeChange}
-              onTimePeriodChange={handleTimePeriodChange}
-              currentUserLocation={null} // This will be fetched from the xpCalc collection
-              onCountryChange={handleCountryChange} 
-              onContinentChange={handleContinentChange}
-              selectedCountry={selectedCountry}
-              selectedContinent={selectedContinent}
-            />
-            
-            <LeaderboardList
-              users={leaderboardData}
-              currentUserId={currentUserId}
-              loading={loading}
-              error={error}
-              noUsersFound={noUsersFound}
-              onUserPress={handleUserPress}
-              onFollowToggle={toggleFollowUser}
-            />
-          </ScrollView>
-        )}
-      </ThemedView>
+            </View>
+          )}
+        </ThemedView>
+      </ScrollView>
     </SafeAreaView>
   );
 }
