@@ -552,6 +552,11 @@ export default function ProfileScreen() {
   useEffect(() => {
     loadUserProfile();
     loadWorkoutData();
+    
+    // Debug available themes and profile image loading
+    console.log("Available themes:", themes);
+    console.log("Dark themes:", darkThemes);
+    console.log("Light themes:", lightThemes);
   }, []);
 
   useEffect(() => {

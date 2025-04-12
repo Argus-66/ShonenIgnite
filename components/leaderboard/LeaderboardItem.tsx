@@ -1,8 +1,9 @@
 import React from 'react';
-import { StyleSheet, View, Text, Image, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ThemedText } from '@/components/ThemedText';
+import ProfileImage from '@/components/ProfileImage';
 
 export interface LeaderboardUser {
   id: string;
@@ -15,11 +16,13 @@ export interface LeaderboardUser {
   xpForNextLevel?: number;
   isFollowed?: boolean;
   distance?: number; // We'll keep this in the type but not display it
+  theme?: string; // Add theme property for profile image
 }
 
 interface LeaderboardItemProps {
   user: LeaderboardUser;
   isCurrentUser: boolean;
+  isTopThree?: boolean;
   onPress: (userId: string) => void;
   onFollowToggle: (userId: string) => void;
 }
@@ -53,7 +56,10 @@ export const LeaderboardItem = ({ user, isCurrentUser, onPress, onFollowToggle }
       </View>
       
       {/* Profile Image */}
-      <Image source={user.profileImage} style={styles.profileImage} />
+      <ProfileImage 
+        themeName={user.theme || 'Dragon Ball'} 
+        size={50} 
+      />
       
       {/* User Info */}
       <View style={styles.userInfo}>

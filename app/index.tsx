@@ -1,11 +1,18 @@
 import { StyleSheet, View, Image, TouchableOpacity } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, Redirect } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LandingPage() {
   const { currentTheme } = useTheme();
+  const { isAuthenticated, isInitializing } = useAuth();
+
+  // If the user is authenticated, redirect to the tabs
+  if (isAuthenticated && !isInitializing) {
+    return <Redirect href="/(tabs)" />;
+  }
 
   const containerStyle = {
     ...styles.container,

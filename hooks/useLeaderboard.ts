@@ -209,16 +209,21 @@ async function processUserForLeaderboard(
       profileImage = userData.profileImage || mockProfileImages[rank % mockProfileImages.length];
     }
     
+    // Get profile image and theme
+    let theme = xpCalcData.theme || userData.theme || 'Dragon Ball';
+    
+    // Create the leaderboard user object
     return {
       id: userId,
-      username: (userData.username as string) || 'Anonymous',
-      profileImage,
+      username: userData.username || 'Anonymous',
+      profileImage: profileImage,
       level,
       xp: xpCalcData[xpField] || 0,
       rank,
       currentXp: currentLevelXP,
       xpForNextLevel,
-      isFollowed: followingList.includes(userId),
+      isFollowed: (followingList || []).includes(userId),
+      theme: theme,
     };
   } catch (error) {
     console.error('Error processing user for leaderboard:', error);
@@ -722,7 +727,8 @@ export default function useLeaderboard() {
           currentXp: currentLevelXP,
           xpForNextLevel,
           isFollowed: currentRankingLevel === 'followers' || followingList.includes(docId),
-          distance
+          distance,
+          theme: xpCalcData.theme || userData.theme || 'Dragon Ball', // Include theme for profile image
         });
       }
       

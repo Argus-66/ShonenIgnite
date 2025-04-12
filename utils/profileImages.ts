@@ -13,6 +13,8 @@ const themeToFileMap: Record<string, string> = {
   'Jujutsu Kaisen': 'jujutsukaisen.png',
   'Baki': 'baki.jpg',
   'Black Clover': 'blackclover.jpg',
+  'Hajime no Ippo': 'hajimenoippo.jpeg',
+  'Megalo Box': 'megalobox.jpg',
   // Add more mappings as needed
 };
 

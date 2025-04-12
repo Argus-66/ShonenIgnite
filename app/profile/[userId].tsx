@@ -11,6 +11,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import getProfileImageByTheme from '@/utils/profileImages';
 import { ActivitySection } from '@/components/profile/ActivitySection';
 import ProfileImage from '@/components/ProfileImage';
+import { BioSection } from '@/components/profile/BioSection';
 
 interface UserProfile {
   username: string;
@@ -450,10 +451,9 @@ export default function UserProfileScreen() {
                 onPress={() => setImageViewerVisible(true)}
                 activeOpacity={0.8}
               >
-                <Image 
-                  source={getProfileImageByTheme(userProfile.theme)}
-                  style={styles.avatar}
-                  resizeMode="cover"
+                <ProfileImage
+                  themeName={userProfile.theme || 'Dragon Ball'}
+                  size={80}
                 />
               </TouchableOpacity>
 
@@ -584,10 +584,10 @@ export default function UserProfileScreen() {
             activeOpacity={1}
             onPress={() => setImageViewerVisible(false)}
           >
-            <Image 
-              source={getProfileImageByTheme(userProfile?.theme || 'default')}
-              style={styles.fullImage}
-              resizeMode="contain"
+            <ProfileImage
+              themeName={userProfile?.theme || 'Dragon Ball'}
+              size={300}
+              showPlaceholder={false}
             />
           </TouchableOpacity>
         </View>

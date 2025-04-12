@@ -1,21 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, TextInput, TouchableOpacity, Image } from 'react-native';
-import { router, Stack } from 'expo-router';
+import { router, Stack, Redirect } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { auth } from '@/config/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useTheme } from '@/contexts/ThemeContext';
-import { saveAuthToken, saveUserData } from '@/utils/authService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginPage() {
   const { currentTheme } = useTheme();
+  const { login, isAuthenticated, error: authError, isInitializing } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // If user is already authenticated, redirect to the main app
+  if (isAuthenticated && !isInitializing) {
+    return <Redirect href="/(tabs)" />;
+  }
+
+  // Update local error state when auth context error changes
+  useEffect(() => {
+    if (authError) {
+      setError(authError);
+    }
+  }, [authError]);
 
   const handleLogin = async () => {
     if (!formData.email || !formData.password) {
@@ -27,30 +38,12 @@ export default function LoginPage() {
       setLoading(true);
       setError('');
       
-      // Sign in with Firebase
-      const userCredential = await signInWithEmailAndPassword(
-        auth, 
-        formData.email, 
-        formData.password
-      );
+      // Use the login function from the auth context
+      await login(formData.email, formData.password);
       
-      // Get the user token and save it
-      const token = await userCredential.user.getIdToken();
-      await saveAuthToken(token);
-      
-      // Save basic user data
-      const userData = {
-        uid: userCredential.user.uid,
-        email: userCredential.user.email,
-        displayName: userCredential.user.displayName,
-        photoURL: userCredential.user.photoURL,
-      };
-      await saveUserData(userData);
-      
-      // Navigate to main app
-      router.replace('/(tabs)');
+      // Navigation is handled by the redirect above when isAuthenticated becomes true
     } catch (err: any) {
-      setError(err.message);
+      // Error is set by the auth context and handled via the useEffect above
     } finally {
       setLoading(false);
     }

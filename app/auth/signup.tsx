@@ -1,17 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, TextInput, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
-import { router, Stack } from 'expo-router';
+import { router, Stack, Redirect } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { auth, db } from '@/config/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { db } from '@/config/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Picker } from '@react-native-picker/picker';
-import { saveAuthToken, saveUserData } from '@/utils/authService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function SignupPage() {
   const { currentTheme } = useTheme();
+  const { signup, isAuthenticated, user, error: authError, isInitializing } = useAuth();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -23,77 +23,87 @@ export default function SignupPage() {
     weight: '',
   });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // If user is already authenticated, redirect to the main app
+  if (isAuthenticated && !isInitializing) {
+    return <Redirect href="/(tabs)" />;
+  }
+
+  // Update local error state when auth context error changes
+  useEffect(() => {
+    if (authError) {
+      setError(authError);
+    }
+  }, [authError]);
 
   const handleSignup = async () => {
     try {
+      setLoading(true);
+      setError('');
+      
       // Validate passwords match
       if (formData.password !== formData.confirmPassword) {
         setError('Passwords do not match');
+        setLoading(false);
         return;
       }
 
-      // Create user with email and password
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        formData.email,
-        formData.password
-      );
-
-      // Get the user token and save it
-      const token = await userCredential.user.getIdToken();
-      await saveAuthToken(token);
+      // Create user with email and password using Auth context
+      await signup(formData.email, formData.password);
       
-      // Save basic user data
-      const userAuthData = {
-        uid: userCredential.user.uid,
-        email: userCredential.user.email,
-        displayName: formData.username,
-      };
-      await saveUserData(userAuthData);
+      // Wait a bit for auth state to update and get the user
+      setTimeout(async () => {
+        if (!user) {
+          setError('Error creating user account');
+          setLoading(false);
+          return;
+        }
 
-      // Create user profile in Firestore
-      const userData = {
-        username: formData.username,
-        email: formData.email,
-        age: parseInt(formData.age),
-        gender: formData.gender,
-        height: parseFloat(formData.height),
-        weight: parseFloat(formData.weight),
-        joinedDate: new Date().toISOString(),
-        lastLogin: new Date().toISOString(),
-        theme: 'default',
-        coins: 0,
-        progression: {
-          level: 1,
-          xp: 0,
-          streak: 0,
-        },
-        workouts: [],
-        skills: {
-          strength: 1,
-          agility: 1,
-          endurance: 1,
-        },
-        badges: [],
-        friends: [],
-        bio: '',
-      };
+        try {
+          // Create user profile in Firestore
+          const userData = {
+            username: formData.username,
+            email: formData.email,
+            age: parseInt(formData.age) || 0,
+            gender: formData.gender,
+            height: parseFloat(formData.height) || 0,
+            weight: parseFloat(formData.weight) || 0,
+            joinedDate: new Date().toISOString(),
+            lastLogin: new Date().toISOString(),
+            theme: 'Dragon Ball', // Default theme
+            totalXP: 0,
+            streak: 0,
+            bestStreak: 0,
+            followers: [],
+            following: [],
+            bio: '',
+          };
 
-      await setDoc(doc(db, 'users', userCredential.user.uid), userData);
-      
-      // Show success message and redirect to login
-      Alert.alert(
-        'Success',
-        'Account created successfully! Please login.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.replace('/auth/login')
-          }
-        ]
-      );
+          await setDoc(doc(db, 'users', user.uid), userData);
+          
+          // Show success message
+          Alert.alert(
+            'Success',
+            'Account created successfully!',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // Navigation is handled by the redirect when isAuthenticated becomes true
+                }
+              }
+            ]
+          );
+        } catch (err: any) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      }, 1000);
     } catch (err: any) {
-      setError(err.message);
+      // Error is set by the auth context and handled via the useEffect above
+      setLoading(false);
     }
   };
 
@@ -231,8 +241,14 @@ export default function SignupPage() {
 
             {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
 
-            <TouchableOpacity style={buttonStyle} onPress={handleSignup}>
-              <ThemedText style={buttonTextStyle}>Sign Up</ThemedText>
+            <TouchableOpacity 
+              style={[buttonStyle, loading && styles.buttonDisabled]}
+              onPress={handleSignup}
+              disabled={loading}
+            >
+              <ThemedText style={buttonTextStyle}>
+                {loading ? 'Creating Account...' : 'Sign Up'}
+              </ThemedText>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => router.push('/auth/login')}>
@@ -324,5 +340,8 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: 16,
     opacity: 0.7,
+  },
+  buttonDisabled: {
+    backgroundColor: 'gray',
   },
 }); 
