@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView, TextInput, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, View, SafeAreaView, TextInput, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -25,6 +25,7 @@ export default function ExploreScreen() {
   const [suggestedUsers, setSuggestedUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadCurrentUser();
@@ -38,6 +39,15 @@ export default function ExploreScreen() {
       setSearchResults([]);
     }
   }, [searchQuery]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([
+      loadCurrentUser(),
+      loadSuggestedUsers()
+    ]);
+    setRefreshing(false);
+  }, []);
 
   const loadCurrentUser = async () => {
     if (!auth.currentUser) return;
@@ -298,6 +308,15 @@ export default function ExploreScreen() {
                 keyExtractor={(item) => item.id}
                 renderItem={renderUserItem}
                 contentContainerStyle={styles.userList}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={[currentTheme.colors.accent]}
+                    tintColor={currentTheme.colors.accent}
+                    progressBackgroundColor={currentTheme.colors.background}
+                  />
+                }
               />
             ) : (
               <View style={styles.emptyState}>
@@ -314,6 +333,15 @@ export default function ExploreScreen() {
               keyExtractor={(item) => item.id}
               renderItem={renderUserItem}
               contentContainerStyle={styles.userList}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={[currentTheme.colors.accent]}
+                  tintColor={currentTheme.colors.accent}
+                  progressBackgroundColor={currentTheme.colors.background}
+                />
+              }
               ListEmptyComponent={() => (
                 <View style={styles.emptyState}>
                   <MaterialCommunityIcons name="account-group" size={48} color={`${currentTheme.colors.text}50`} />

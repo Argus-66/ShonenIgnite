@@ -321,6 +321,7 @@ export default function WorkoutsScreen() {
             onRefresh={onRefresh}
             colors={[currentTheme.colors.accent]}
             tintColor={currentTheme.colors.accent}
+            progressBackgroundColor={currentTheme.colors.background}
           />
         }
       >

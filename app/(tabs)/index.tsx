@@ -1,4 +1,4 @@
-import { StyleSheet, View, TouchableOpacity, ScrollView, Platform, StatusBar, Modal, TextInput, Animated, Dimensions, Text, RefreshControl } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ScrollView, Platform, StatusBar, Modal, TextInput, Animated, Dimensions, Text, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -108,6 +108,13 @@ export default function DashboardScreen() {
     loadDashboardData();
     // Clean up incomplete workouts from previous days
     cleanupIncompleteWorkouts();
+  }, []);
+
+  // Add onRefresh function
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadDashboardData();
+    setRefreshing(false);
   }, []);
 
   useEffect(() => {
@@ -1402,12 +1409,6 @@ export default function DashboardScreen() {
     },
   });
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadDashboardData();
-    setRefreshing(false);
-  }, []);
-
   const cleanupIncompleteWorkouts = async () => {
     if (!auth.currentUser) return;
 
@@ -1461,10 +1462,11 @@ export default function DashboardScreen() {
 
   if (loading || !stats) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.container}>
-          <ThemedText>Loading dashboard...</ThemedText>
-      </ThemedView>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
+        <ThemedView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color={currentTheme.colors.accent} />
+          <ThemedText style={{ marginTop: 16, fontSize: 16 }}>Loading dashboard...</ThemedText>
+        </ThemedView>
       </SafeAreaView>
     );
   }
@@ -1485,6 +1487,7 @@ export default function DashboardScreen() {
             onRefresh={onRefresh}
             colors={[currentTheme.colors.accent]}
             tintColor={currentTheme.colors.accent}
+            progressBackgroundColor={currentTheme.colors.background}
           />
         }
       >

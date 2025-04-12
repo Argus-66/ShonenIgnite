@@ -142,18 +142,6 @@ export default function LeaderboardScreen() {
         backgroundColor={currentTheme.colors.background}
       />
       <ThemedView style={styles.container}>
-        <LeaderboardHeader 
-          rankingLevel={currentRankingLevel}
-          timePeriod={currentTimePeriod}
-          onRankingLevelChange={handleRankingTypeChange}
-          onTimePeriodChange={handleTimePeriodChange}
-          currentUserLocation={null} // This will be fetched from the xpCalc collection
-          onCountryChange={handleCountryChange} 
-          onContinentChange={handleContinentChange}
-          selectedCountry={selectedCountry}
-          selectedContinent={selectedContinent}
-        />
-        
         {!hasCheckedPermission ? (
           <View style={styles.contentContainer}>
             {/* Loading state handled by LeaderboardList */}
@@ -170,9 +158,22 @@ export default function LeaderboardScreen() {
                 onRefresh={onRefresh}
                 colors={[currentTheme.colors.accent]}
                 tintColor={currentTheme.colors.accent}
+                progressBackgroundColor={currentTheme.colors.background}
               />
             }
           >
+            <LeaderboardHeader 
+              rankingLevel={currentRankingLevel}
+              timePeriod={currentTimePeriod}
+              onRankingLevelChange={handleRankingTypeChange}
+              onTimePeriodChange={handleTimePeriodChange}
+              currentUserLocation={null} // This will be fetched from the xpCalc collection
+              onCountryChange={handleCountryChange} 
+              onContinentChange={handleContinentChange}
+              selectedCountry={selectedCountry}
+              selectedContinent={selectedContinent}
+            />
+            
             <LeaderboardList
               users={leaderboardData}
               currentUserId={currentUserId}
