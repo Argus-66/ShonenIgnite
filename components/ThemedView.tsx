@@ -7,8 +7,12 @@ export type ThemedViewProps = ViewProps & {
 };
 
 export function ThemedView({ style, lightColor, darkColor, ...otherProps }: ThemedViewProps) {
-  const { currentTheme } = useTheme();
-  const backgroundColor = currentTheme.colors.primary;
+  const { currentTheme, isDarkMode } = useTheme();
+  
+  // Use lightColor/darkColor props if provided, otherwise use theme background
+  const backgroundColor = isDarkMode 
+    ? (darkColor || currentTheme.colors.background)
+    : (lightColor || currentTheme.colors.background);
 
   const combinedStyle = {
     backgroundColor,

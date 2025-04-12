@@ -1,21 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, TouchableOpacity, SafeAreaView, Modal, TextInput, ScrollView, StatusBar, RefreshControl, Image, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, SafeAreaView, Modal, TextInput, ScrollView, StatusBar, RefreshControl, Image } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { useTheme, Theme } from '@/contexts/ThemeContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { Theme, themes } from '@/constants/Themes';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { auth, db } from '@/config/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useCallback } from 'react';
 import { router } from 'expo-router';
-import { themes } from '@/constants/Themes';
+import getProfileImageByTheme from '@/utils/profileImages';
+import ProfileImage from '@/components/ProfileImage';
 import { ActivitySection } from '@/components/profile/ActivitySection';
 import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { UserStats } from '@/components/profile/UserStats';
 import { BioSection } from '@/components/profile/BioSection';
 import { ThemeSelector } from '@/components/profile/ThemeSelector';
-import getProfileImageByTheme from '@/utils/profileImages';
-import ProfileImage from '@/components/ProfileImage';
 
 interface UserProfile {
   username: string;
@@ -508,10 +508,20 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 12,
   },
+  themeSection: {
+    marginTop: 10,
+  },
+  themeSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
 });
 
 export default function ProfileScreen() {
-  const { currentTheme, setTheme, availableThemes } = useTheme();
+  const { currentTheme, setTheme, availableThemes, isDarkMode, darkThemes, lightThemes } = useTheme();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -968,18 +978,11 @@ export default function ProfileScreen() {
     );
   }
 
-  if (loading && !refreshing) {
+  if (loading) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: '#121212' }]}>
-        <StatusBar
-          barStyle="light-content"
-          backgroundColor="#121212"
-        />
-        <ThemedView style={[styles.container, { backgroundColor: '#121212' }]}>
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={currentTheme.colors.accent} />
-            <ThemedText style={{ marginTop: 12 }}>Loading profile...</ThemedText>
-          </View>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
+        <ThemedView style={styles.container}>
+          <ThemedText>Loading profile...</ThemedText>
         </ThemedView>
       </SafeAreaView>
     );
@@ -1025,7 +1028,7 @@ export default function ProfileScreen() {
       paddingTop: 8 
     }]}>
       <StatusBar
-        barStyle={isColorDark(currentTheme.colors.background) ? "light-content" : "dark-content"}
+        barStyle={isDarkMode ? "light-content" : "dark-content"}
         backgroundColor={currentTheme.colors.background}
       />
       <ScrollView 
@@ -1037,7 +1040,6 @@ export default function ProfileScreen() {
             onRefresh={onRefresh}
             colors={[currentTheme.colors.accent]}
             tintColor={currentTheme.colors.accent}
-            progressBackgroundColor={currentTheme.colors.background}
           />
         }
       >
@@ -1086,16 +1088,28 @@ export default function ProfileScreen() {
           >
             <View style={styles.modalOverlay}>
               <View style={[styles.themeModalContent, { backgroundColor: currentTheme.colors.background, borderRadius: 16 }]}>
-                <View style={styles.modalHeader}>
-                  <ThemedText style={styles.modalTitle}>Choose Your Theme</ThemedText>
-                  <TouchableOpacity onPress={() => setShowThemeModal(false)}>
-                    <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.text} />
-                  </TouchableOpacity>
-                </View>
-                <ScrollView style={styles.themeList} showsVerticalScrollIndicator={false}>
-                  {Object.entries(themes).map(([themeName, theme]) => 
-                    renderThemeOption(themeName, theme as Theme)
-                  )}
+                <ThemedText style={styles.modalTitle}>Select Theme</ThemedText>
+                <TouchableOpacity onPress={() => setShowThemeModal(false)}>
+                  <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.text} style={styles.closeButton} />
+                </TouchableOpacity>
+                <ScrollView>
+                  <View style={styles.themeSection}>
+                    <ThemedText style={styles.themeSectionTitle}>
+                      <MaterialCommunityIcons name="weather-night" size={20} color={currentTheme.colors.text} /> Dark Themes
+                    </ThemedText>
+                    {darkThemes.map(themeName => 
+                      renderThemeOption(themeName, themes[themeName])
+                    )}
+                  </View>
+                  
+                  <View style={[styles.themeSection, { marginTop: 20 }]}>
+                    <ThemedText style={styles.themeSectionTitle}>
+                      <MaterialCommunityIcons name="white-balance-sunny" size={20} color={currentTheme.colors.text} /> Light Themes
+                    </ThemedText>
+                    {lightThemes.map(themeName => 
+                      renderThemeOption(themeName, themes[themeName])
+                    )}
+                  </View>
                 </ScrollView>
               </View>
             </View>

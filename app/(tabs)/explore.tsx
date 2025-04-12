@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, SafeAreaView, TextInput, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl, ScrollView, StatusBar } from 'react-native';
+import { useState, useEffect } from 'react';
+import { StyleSheet, View, SafeAreaView, TextInput, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -24,7 +24,6 @@ export default function ExploreScreen() {
   const [searchResults, setSearchResults] = useState<UserData[]>([]);
   const [suggestedUsers, setSuggestedUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
 
   useEffect(() => {
@@ -263,107 +262,68 @@ export default function ExploreScreen() {
     </TouchableOpacity>
   );
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await Promise.all([loadCurrentUser(), loadSuggestedUsers()]);
-    setRefreshing(false);
-  }, []);
-
-  // Only show full loading screen during initial load, not during refresh
-  if (loading && !refreshing && suggestedUsers.length === 0) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#121212' }}>
-        <StatusBar
-          barStyle="light-content"
-          backgroundColor="#121212"
-        />
-        <ThemedView style={[styles.container, { backgroundColor: '#121212', justifyContent: 'center', alignItems: 'center' }]}>
-          <ActivityIndicator size="large" color={currentTheme.colors.accent} />
-          <ThemedText style={{ marginTop: 12 }}>Loading explore...</ThemedText>
-        </ThemedView>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: currentTheme.colors.background }}>
-      <ScrollView
-        style={{ flex: 1 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[currentTheme.colors.accent]}
-            tintColor={currentTheme.colors.accent}
-            progressBackgroundColor={currentTheme.colors.background}
+      <ThemedView style={styles.container}>
+        <View style={styles.header}>
+          <ThemedText style={styles.title}>Explore</ThemedText>
+        </View>
+        
+        <View style={[styles.searchContainer, { backgroundColor: `${currentTheme.colors.text}10` }]}>
+          <MaterialCommunityIcons name="magnify" size={24} color={currentTheme.colors.text} />
+          <TextInput
+            style={[styles.searchInput, { color: currentTheme.colors.text }]}
+            placeholder="Search by username"
+            placeholderTextColor={`${currentTheme.colors.text}50`}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
           />
-        }
-      >
-        <ThemedView style={styles.container}>
-          <View style={styles.header}>
-            <ThemedText style={styles.title}>Explore</ThemedText>
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <MaterialCommunityIcons name="close-circle" size={20} color={currentTheme.colors.text} />
+            </TouchableOpacity>
+          )}
+        </View>
+        
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={currentTheme.colors.accent} />
           </View>
-          
-          <View style={[styles.searchContainer, { backgroundColor: `${currentTheme.colors.text}10` }]}>
-            <MaterialCommunityIcons name="magnify" size={24} color={currentTheme.colors.text} />
-            <TextInput
-              style={[styles.searchInput, { color: currentTheme.colors.text }]}
-              placeholder="Search by username"
-              placeholderTextColor={`${currentTheme.colors.text}50`}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <MaterialCommunityIcons name="close-circle" size={20} color={currentTheme.colors.text} />
-              </TouchableOpacity>
-            )}
-          </View>
-          
-          {loading && !refreshing ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={currentTheme.colors.accent} />
-            </View>
-          ) : searchQuery.length > 0 ? (
-            <>
-              <ThemedText style={styles.sectionTitle}>Search Results</ThemedText>
-              {searchResults.length > 0 ? (
-                <FlatList
-                  data={searchResults}
-                  keyExtractor={(item) => item.id}
-                  renderItem={renderUserItem}
-                  contentContainerStyle={styles.userList}
-                  scrollEnabled={false}
-                  nestedScrollEnabled={false}
-                />
-              ) : (
-                <View style={styles.emptyState}>
-                  <MaterialCommunityIcons name="account-search" size={48} color={`${currentTheme.colors.text}50`} />
-                  <ThemedText style={styles.emptyStateText}>No users found</ThemedText>
-                </View>
-              )}
-            </>
-          ) : (
-            <>
-              <ThemedText style={styles.sectionTitle}>Suggested Users</ThemedText>
+        ) : searchQuery.length > 0 ? (
+          <>
+            <ThemedText style={styles.sectionTitle}>Search Results</ThemedText>
+            {searchResults.length > 0 ? (
               <FlatList
-                data={suggestedUsers}
+                data={searchResults}
                 keyExtractor={(item) => item.id}
                 renderItem={renderUserItem}
                 contentContainerStyle={styles.userList}
-                scrollEnabled={false}
-                nestedScrollEnabled={false}
-                ListEmptyComponent={() => (
-                  <View style={styles.emptyState}>
-                    <MaterialCommunityIcons name="account-group" size={48} color={`${currentTheme.colors.text}50`} />
-                    <ThemedText style={styles.emptyStateText}>No users found</ThemedText>
-                  </View>
-                )}
               />
-            </>
-          )}
-        </ThemedView>
-      </ScrollView>
+            ) : (
+              <View style={styles.emptyState}>
+                <MaterialCommunityIcons name="account-search" size={48} color={`${currentTheme.colors.text}50`} />
+                <ThemedText style={styles.emptyStateText}>No users found</ThemedText>
+              </View>
+            )}
+          </>
+        ) : (
+          <>
+            <ThemedText style={styles.sectionTitle}>Suggested Users</ThemedText>
+            <FlatList
+              data={suggestedUsers}
+              keyExtractor={(item) => item.id}
+              renderItem={renderUserItem}
+              contentContainerStyle={styles.userList}
+              ListEmptyComponent={() => (
+                <View style={styles.emptyState}>
+                  <MaterialCommunityIcons name="account-group" size={48} color={`${currentTheme.colors.text}50`} />
+                  <ThemedText style={styles.emptyStateText}>No users found</ThemedText>
+                </View>
+              )}
+            />
+          </>
+        )}
+      </ThemedView>
     </SafeAreaView>
   );
 }

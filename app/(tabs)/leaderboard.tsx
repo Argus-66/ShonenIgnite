@@ -1,4 +1,4 @@
-import { StyleSheet, View, SafeAreaView, Platform, StatusBar, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, SafeAreaView, Platform, StatusBar, ScrollView, RefreshControl } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
 import React, { useState, useEffect, useCallback } from 'react';
@@ -13,7 +13,6 @@ import { updateCurrentUserXpCalc } from '@/utils/xpCalcService';
 import { useRouter } from 'expo-router';
 import { auth } from '@/config/firebase';
 import { LeaderboardUser } from '@/components/leaderboard/LeaderboardItem';
-import { ThemedText } from '@/components/ThemedText';
 
 export default function LeaderboardScreen() {
   const { currentTheme } = useTheme();
@@ -136,61 +135,44 @@ export default function LeaderboardScreen() {
     await handleFollowToggle(userId);
   };
 
-  // Only show full loading screen during initial load, not during refresh
-  if (!hasCheckedPermission && !refreshing) {
-    return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: '#121212' }]}>
-        <StatusBar
-          barStyle="light-content"
-          backgroundColor="#121212"
-        />
-        <ThemedView style={[styles.container, { backgroundColor: '#121212', justifyContent: 'center', alignItems: 'center' }]}>
-          <ActivityIndicator size="large" color={currentTheme.colors.accent} />
-          <ThemedText style={{ marginTop: 12 }}>Loading leaderboard...</ThemedText>
-        </ThemedView>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
       <StatusBar
         barStyle="light-content"
         backgroundColor={currentTheme.colors.background}
       />
-      <ScrollView 
-        style={{ flex: 1 }}
-        contentContainerStyle={{ flexGrow: 1 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[currentTheme.colors.accent]}
-            tintColor={currentTheme.colors.accent}
-            progressBackgroundColor={currentTheme.colors.background}
-          />
-        }
-      >
-        <ThemedView style={styles.container}>
-          <LeaderboardHeader 
-            rankingLevel={currentRankingLevel}
-            timePeriod={currentTimePeriod}
-            onRankingLevelChange={handleRankingTypeChange}
-            onTimePeriodChange={handleTimePeriodChange}
-            currentUserLocation={null} // This will be fetched from the xpCalc collection
-            onCountryChange={handleCountryChange} 
-            onContinentChange={handleContinentChange}
-            selectedCountry={selectedCountry}
-            selectedContinent={selectedContinent}
-          />
-          
-          {!hasCheckedPermission ? (
-            <View style={styles.contentContainer}>
-              {/* Loading state handled by LeaderboardList */}
-            </View>
-          ) : isLocationNeeded() ? (
-            <LocationPermission onRequestPermission={requestLocationPermission} />
-          ) : (
+      <ThemedView style={styles.container}>
+        <LeaderboardHeader 
+          rankingLevel={currentRankingLevel}
+          timePeriod={currentTimePeriod}
+          onRankingLevelChange={handleRankingTypeChange}
+          onTimePeriodChange={handleTimePeriodChange}
+          currentUserLocation={null} // This will be fetched from the xpCalc collection
+          onCountryChange={handleCountryChange} 
+          onContinentChange={handleContinentChange}
+          selectedCountry={selectedCountry}
+          selectedContinent={selectedContinent}
+        />
+        
+        {!hasCheckedPermission ? (
+          <View style={styles.contentContainer}>
+            {/* Loading state handled by LeaderboardList */}
+          </View>
+        ) : isLocationNeeded() ? (
+          <LocationPermission onRequestPermission={requestLocationPermission} />
+        ) : (
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[currentTheme.colors.accent]}
+                tintColor={currentTheme.colors.accent}
+              />
+            }
+          >
             <LeaderboardList
               users={leaderboardData}
               currentUserId={currentUserId}
@@ -200,9 +182,9 @@ export default function LeaderboardScreen() {
               onUserPress={handleUserPress}
               onFollowToggle={toggleFollowUser}
             />
-          )}
-        </ThemedView>
-      </ScrollView>
+          </ScrollView>
+        )}
+      </ThemedView>
     </SafeAreaView>
   );
 }

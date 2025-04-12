@@ -1,4 +1,4 @@
-import { TouchableOpacity, StyleSheet } from 'react-native';
+import { TouchableOpacity, StyleSheet, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -9,7 +9,7 @@ interface ThemeSelectorProps {
 }
 
 export const ThemeSelector = ({ currentThemeName, onPress }: ThemeSelectorProps) => {
-  const { currentTheme } = useTheme();
+  const { currentTheme, isDarkMode } = useTheme();
 
   return (
     <TouchableOpacity 
@@ -22,14 +22,26 @@ export const ThemeSelector = ({ currentThemeName, onPress }: ThemeSelectorProps)
         marginTop: 12,
         padding: 12,
         flexDirection: 'row',
-        alignItems: 'center'
+        alignItems: 'center',
+        justifyContent: 'space-between'
       }]}
       onPress={onPress}
     >
-      <MaterialCommunityIcons name="palette" size={20} color={currentTheme.colors.accent} />
-      <ThemedText style={[styles.themeButtonText, { marginLeft: 8 }]}>
-        Current Theme: {currentThemeName}
-      </ThemedText>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <MaterialCommunityIcons 
+          name={isDarkMode ? "weather-night" : "white-balance-sunny"} 
+          size={20} 
+          color={currentTheme.colors.accent} 
+        />
+        <ThemedText style={[styles.themeButtonText, { marginLeft: 8 }]}>
+          {currentThemeName} ({isDarkMode ? 'Dark' : 'Light'})
+        </ThemedText>
+      </View>
+      <MaterialCommunityIcons 
+        name="palette" 
+        size={20} 
+        color={currentTheme.colors.accent} 
+      />
     </TouchableOpacity>
   );
 };

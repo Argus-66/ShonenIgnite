@@ -12,21 +12,21 @@ function TabBarIcon(props: {
 }
 
 export default function TabLayout() {
-  const { currentTheme } = useTheme();
+  const { currentTheme, isDarkMode } = useTheme();
 
   if (!currentTheme) {
     return null; // Or a loading screen
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#121212' }}>
-      <StatusBar style="light" />
+    <View style={{ flex: 1, backgroundColor: currentTheme.colors.background }}>
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: currentTheme.colors.accent,
           tabBarInactiveTintColor: currentTheme.colors.textSecondary,
           tabBarStyle: {
-            backgroundColor: '#121212',
+            backgroundColor: currentTheme.colors.background,
             borderTopColor: currentTheme.colors.border,
             borderTopWidth: 1,
             height: 60,
@@ -34,7 +34,6 @@ export default function TabLayout() {
             paddingTop: 8,
           },
           headerShown: false,
-          contentStyle: { backgroundColor: '#121212' },
         }}>
         <Tabs.Screen
           name="index"

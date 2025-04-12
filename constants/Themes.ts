@@ -1,5 +1,6 @@
 export type Theme = {
   name: string;
+  mode: 'dark' | 'light';
   colors: {
     primary: string;
     secondary: string;
@@ -15,9 +16,11 @@ export type Theme = {
   };
 };
 
-export const themes: Record<string, Theme> = {
+// Dark Themes
+const darkThemes: Record<string, Theme> = {
   'Solo Leveling': {
     name: 'Solo Leveling',
+    mode: 'dark',
     colors: {
       primary: '#190019',
       secondary: '#9054df',
@@ -34,6 +37,7 @@ export const themes: Record<string, Theme> = {
   },
   'Dragon Ball': {
     name: 'Dragon Ball',
+    mode: 'dark',
     colors: {
       primary: '#0A0A23',
       secondary: '#FF8C00',
@@ -50,6 +54,7 @@ export const themes: Record<string, Theme> = {
   },
   'One Punch': {
     name: 'One Punch',
+    mode: 'dark',
     colors: {
       primary: '#1A1A1A',
       secondary: '#F9D342',
@@ -66,6 +71,7 @@ export const themes: Record<string, Theme> = {
   },
   'Baki': {
     name: 'Baki',
+    mode: 'dark',
     colors: {
       primary: '#101010',
       secondary: '#FF7043',
@@ -82,6 +88,7 @@ export const themes: Record<string, Theme> = {
   },
   'Attack on Titan': {
     name: 'Attack on Titan',
+    mode: 'dark',
     colors: {
       primary: '#0C2E3F',
       secondary: '#556B2F',
@@ -98,6 +105,7 @@ export const themes: Record<string, Theme> = {
   },
   'One Piece': {
     name: 'One Piece',
+    mode: 'dark',
     colors: {
       primary: '#001F3F',
       secondary: '#27AE60',
@@ -114,6 +122,7 @@ export const themes: Record<string, Theme> = {
   },
   'Jujutsu Kaisen': {
     name: 'Jujutsu Kaisen',
+    mode: 'dark',
     colors: {
       primary: '#1C1C1C',
       secondary: '#0077B6',
@@ -130,6 +139,7 @@ export const themes: Record<string, Theme> = {
   },
   'Black Clover': {
     name: 'Black Clover',
+    mode: 'dark',
     colors: {
       primary: '#1A1A1A',
       secondary: '#000000',
@@ -146,6 +156,7 @@ export const themes: Record<string, Theme> = {
   },
   'Naruto': {
     name: 'Naruto',
+    mode: 'dark',
     colors: {
       primary: '#0B0C10',
       secondary: '#FF4136',
@@ -160,4 +171,48 @@ export const themes: Record<string, Theme> = {
       error: '#FF4444',
     },
   },
+};
+
+// Light Themes
+const lightThemes: Record<string, Theme> = {
+  'Hajime no Ippo': {
+    name: 'Hajime no Ippo',
+    mode: 'light',
+    colors: {
+      primary: '#FFFFFF',
+      secondary: '#0D47A1', // Deeper blue for better contrast on mobile
+      accent: '#FFC107',    // Champion belt gold
+      accent2: '#2E7D32',   // Darker Kamogawa gym green
+      textPrimary: '#0D47A1',
+      textSecondary: '#2E7D32',
+      background: '#F5F5F5', // Light gray background reduces eye strain
+      text: '#0D47A1',
+      card: '#E3F2FD',
+      border: '#0D47A1',    // Stronger border for better visibility
+      error: '#C62828',
+    },
+  },
+  'Megalo Box': {
+    name: 'Megalo Box',
+    mode: 'light',
+    colors: {
+      primary: '#FFFFFF',
+      secondary: '#455A64', // Darker steel blue for contrast
+      accent: '#FF8F00',    // Brighter amber for mobile visibility
+      accent2: '#BF360C',   // Gear red/orange
+      textPrimary: '#263238',
+      textSecondary: '#37474F',
+      background: '#ECEFF1', // Light bluish-gray background
+      text: '#263238',
+      card: '#E1F5FE',
+      border: '#455A64',    // Stronger border for better visibility
+      error: '#D84315',
+    },
+  },
+};
+
+// Combine dark and light themes
+export const themes: Record<string, Theme> = {
+  ...darkThemes,
+  ...lightThemes,
 }; 
