@@ -217,10 +217,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   themeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 16,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    shadowColor: 'transparent',
+    marginVertical: 6,
+    borderRadius: 12,
+    borderWidth: 2,
+    overflow: 'hidden',
   },
   themeOptionLeft: {
     flexDirection: 'row',
@@ -229,16 +233,28 @@ const styles = StyleSheet.create({
   themeColorPreviews: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: 12,
   },
   themeColorPreview: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    marginRight: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginRight: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
   },
   themeOptionText: {
     fontSize: 16,
+    fontWeight: '600',
+  },
+  selectedIndicator: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderBottomLeftRadius: 10,
   },
   scrollView: {
     flex: 1,
@@ -256,7 +272,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
   },
   modalActions: {
@@ -396,6 +412,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+    maxHeight: '80%',
   },
   themeList: {
     maxHeight: 400,
@@ -510,13 +527,20 @@ const styles = StyleSheet.create({
   },
   themeSection: {
     marginTop: 10,
+    paddingBottom: 12,
   },
   themeSectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 14,
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  themeScrollView: {
+    paddingHorizontal: 4,
   },
 });
 
@@ -1052,6 +1076,52 @@ export default function ProfileScreen() {
     following.username.toLowerCase().includes(followingSearchQuery.toLowerCase())
   );
 
+  // Move renderThemeOption before conditional returns
+  const renderThemeOption = (themeName: string, theme: Theme) => {
+    if (!theme?.colors) return null;
+    
+    const isSelected = themeName === userProfile?.theme;
+    
+    return (
+      <TouchableOpacity
+        key={themeName}
+        style={[
+          styles.themeOption,
+          { 
+            backgroundColor: theme.colors.background,
+            borderColor: isSelected ? theme.colors.accent : 'transparent',
+            borderWidth: isSelected ? 2 : 0,
+            shadowColor: theme.colors.text,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: isSelected ? 0.3 : 0.1,
+            shadowRadius: 3,
+            elevation: isSelected ? 4 : 2,
+          }
+        ]}
+        onPress={() => handleThemeChange(themeName)}
+      >
+        {isSelected && (
+          <View style={[styles.selectedIndicator, { backgroundColor: `${theme.colors.accent}40` }]}>
+            <ThemedText style={{ color: theme.colors.text, fontWeight: 'bold', fontSize: 12 }}>
+              ACTIVE
+            </ThemedText>
+          </View>
+        )}
+        <View style={styles.themeOptionLeft}>
+          <View style={styles.themeColorPreviews}>
+            <View style={[styles.themeColorPreview, { backgroundColor: theme.colors.primary }]} />
+            <View style={[styles.themeColorPreview, { backgroundColor: theme.colors.accent }]} />
+            <View style={[styles.themeColorPreview, { backgroundColor: theme.colors.secondary }]} />
+          </View>
+          <ThemedText style={[styles.themeOptionText, { color: theme.colors.text }]}>{themeName}</ThemedText>
+        </View>
+        {isSelected && (
+          <MaterialCommunityIcons name="check-circle" size={24} color={theme.colors.accent} />
+        )}
+      </TouchableOpacity>
+    );
+  };
+
   if (!currentTheme || !availableThemes) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -1071,40 +1141,6 @@ export default function ProfileScreen() {
       </SafeAreaView>
     );
   }
-
-  const renderThemeOption = (themeName: string, theme: Theme) => {
-    if (!theme?.colors) return null;
-    
-    const isSelected = themeName === userProfile?.theme;
-    
-    return (
-      <TouchableOpacity
-        key={themeName}
-        style={[
-          styles.themeOption,
-          { 
-            backgroundColor: theme.colors.background,
-            borderColor: isSelected ? theme.colors.accent : theme.colors.border,
-            borderWidth: isSelected ? 2 : 1,
-            borderRadius: 12
-          }
-        ]}
-        onPress={() => handleThemeChange(themeName)}
-      >
-        <View style={styles.themeOptionLeft}>
-          <View style={styles.themeColorPreviews}>
-            <View style={[styles.themeColorPreview, { backgroundColor: theme.colors.primary }]} />
-            <View style={[styles.themeColorPreview, { backgroundColor: theme.colors.accent }]} />
-            <View style={[styles.themeColorPreview, { backgroundColor: theme.colors.secondary }]} />
-          </View>
-          <ThemedText style={[styles.themeOptionText, { color: theme.colors.text }]}>{themeName}</ThemedText>
-        </View>
-        {isSelected && (
-          <MaterialCommunityIcons name="check-circle" size={24} color={theme.colors.accent} />
-        )}
-      </TouchableOpacity>
-    );
-  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { 
@@ -1172,14 +1208,43 @@ export default function ProfileScreen() {
           >
             <View style={styles.modalOverlay}>
               <View style={[styles.themeModalContent, { backgroundColor: currentTheme.colors.background, borderRadius: 16 }]}>
-                <ThemedText style={styles.modalTitle}>Select Theme</ThemedText>
-                <TouchableOpacity onPress={() => setShowThemeModal(false)}>
-                  <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.text} style={styles.closeButton} />
-                </TouchableOpacity>
-                <ScrollView>
+                <View style={styles.modalHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <MaterialCommunityIcons 
+                      name="palette" 
+                      size={24} 
+                      color={currentTheme.colors.accent} 
+                      style={{ marginRight: 10 }}
+                    />
+                    <ThemedText style={[styles.modalTitle, { color: currentTheme.colors.accent }]}>
+                      Select Theme
+                    </ThemedText>
+                  </View>
+                  <TouchableOpacity 
+                    style={[styles.closeButton, { backgroundColor: `${currentTheme.colors.accent}20` }]} 
+                    onPress={() => setShowThemeModal(false)}
+                  >
+                    <MaterialCommunityIcons name="close" size={20} color={currentTheme.colors.text} />
+                  </TouchableOpacity>
+                </View>
+                
+                <ScrollView 
+                  style={styles.themeScrollView} 
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 20 }}
+                >
                   <View style={styles.themeSection}>
-                    <ThemedText style={styles.themeSectionTitle}>
-                      <MaterialCommunityIcons name="weather-night" size={20} color={currentTheme.colors.text} /> Dark Themes
+                    <ThemedText style={[
+                      styles.themeSectionTitle, 
+                      { backgroundColor: `${currentTheme.colors.accent}15` }
+                    ]}>
+                      <MaterialCommunityIcons 
+                        name="weather-night" 
+                        size={20} 
+                        color={currentTheme.colors.accent} 
+                        style={{ marginRight: 8 }}
+                      /> 
+                      Dark Themes
                     </ThemedText>
                     {darkThemes.map(themeName => 
                       renderThemeOption(themeName, themes[themeName])
@@ -1187,8 +1252,17 @@ export default function ProfileScreen() {
                   </View>
                   
                   <View style={[styles.themeSection, { marginTop: 20 }]}>
-                    <ThemedText style={styles.themeSectionTitle}>
-                      <MaterialCommunityIcons name="white-balance-sunny" size={20} color={currentTheme.colors.text} /> Light Themes
+                    <ThemedText style={[
+                      styles.themeSectionTitle, 
+                      { backgroundColor: `${currentTheme.colors.accent}15` }
+                    ]}>
+                      <MaterialCommunityIcons 
+                        name="white-balance-sunny" 
+                        size={20} 
+                        color={currentTheme.colors.accent} 
+                        style={{ marginRight: 8 }}
+                      /> 
+                      Light Themes
                     </ThemedText>
                     {lightThemes.map(themeName => 
                       renderThemeOption(themeName, themes[themeName])

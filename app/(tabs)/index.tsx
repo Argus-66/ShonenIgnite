@@ -563,6 +563,7 @@ export default function DashboardScreen() {
       setShowEditModal(false);
       setProgressValue('');
       setEditingWorkout(null);
+      setWorkoutIntensity('Medium');
       
       // Refresh data in background without showing loading state
       await loadDashboardData(true);
@@ -954,6 +955,307 @@ export default function DashboardScreen() {
     setShowEditModal(true);
   };
 
+  // Function to get available intensities based on workout type
+  const getAvailableIntensitiesForWorkoutType = (workoutName: string): string[] => {
+    // Default intensities for all workouts
+    const defaultIntensities = ['Light', 'Medium', 'High'];
+    
+    // Customize intensities for specific workout types
+    const workoutTypeIntensitiesMap: Record<string, string[]> = {
+      'Running': ['Slow (5-6 km/h)', 'Medium (8-10 km/h)', 'Fast (12+ km/h)'],
+      'Walking': ['Slow (3 km/h)', 'Medium (4-5 km/h)', 'Fast (6+ km/h)'],
+      'Cycling': ['Slow (10-15 km/h)', 'Medium (15-25 km/h)', 'Fast (25+ km/h)'],
+      'Swimming': ['Slow', 'Medium', 'Fast'],
+      'Circuit Training': ['Light', 'Medium', 'Intense'],
+      'Yoga': ['Gentle', 'Regular', 'Power'],
+      'Pilates': ['Beginner', 'Intermediate', 'Advanced'],
+    };
+    
+    // Check if the workout name contains any of the keys
+    for (const [type, intensities] of Object.entries(workoutTypeIntensitiesMap)) {
+      if (workoutName.toLowerCase().includes(type.toLowerCase())) {
+        return intensities;
+      }
+    }
+    
+    return defaultIntensities;
+  };
+  
+  // Add the onRefresh function that was missing
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadDashboardData(true);
+    setRefreshing(false);
+  }, []);
+
+  const handleRemoveAdditionalWorkout = async (workout: WorkoutProgress) => {
+    if (!auth.currentUser || !stats) return;
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      console.log("Removing additional workout:", workout.name, "Date:", workout.date);
+      
+      // Optimistic UI update - update local state immediately
+      const updatedAdditionalWorkouts = stats.additionalWorkouts.filter(
+        w => !(w.name === workout.name && w.timestamp === workout.timestamp)
+      );
+      
+      // Update local state immediately
+      setStats(prev => prev ? {
+        ...prev,
+        additionalWorkouts: updatedAdditionalWorkouts,
+        dailyCalories: calculateTotalDailyCalories([...prev.dailyWorkouts, ...updatedAdditionalWorkouts])
+      } : null);
+      
+      // Get reference to user's progress document
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+      const progressDoc = await getDoc(progressRef);
+      
+      if (!progressDoc.exists()) {
+        console.log("Progress document doesn't exist");
+        return;
+      }
+      
+      const progressData = progressDoc.data();
+      
+      // Check if this workout exists in progress
+      if (!progressData[workout.name] || !progressData[workout.name][today]) {
+        console.log("Workout not found in progress data");
+        return;
+      }
+      
+      // Create updated progress data without this workout for today
+      const updatedWorkoutData = { ...progressData[workout.name] };
+      delete updatedWorkoutData[today];
+      
+      // If there are no more dates for this workout, remove the entire workout
+      if (Object.keys(updatedWorkoutData).length === 0) {
+        const updatedProgressData = { ...progressData };
+        delete updatedProgressData[workout.name];
+        await setDoc(progressRef, updatedProgressData);
+      } else {
+        // Otherwise, just update this workout's data
+        await updateDoc(progressRef, {
+          [`${workout.name}`]: updatedWorkoutData
+        });
+      }
+      
+      console.log(`Removed additional workout: ${workout.name}`);
+      
+      // Recalculate XP after workout change
+      await updateXPAfterWorkoutChange();
+      
+      // Refresh data in background without showing loading state
+      await loadDashboardData(true);
+    } catch (error) {
+      console.error('Error removing additional workout:', error);
+    }
+  };
+
+  // Add the missing functions back in the correct order
+  // Calculate total calories burned today from all workouts
+  const calculateTotalDailyCalories = (workouts: WorkoutProgress[]): number => {
+    const today = new Date().toISOString().split('T')[0];
+    
+    return workouts
+      .filter(workout => workout.date === today && workout.completed)
+      .reduce((total, workout) => {
+        // If calories are already calculated and stored, use those
+        if (workout.calories) {
+          return total + workout.calories;
+        }
+        
+        // Otherwise calculate calories based on workout data
+        const userWeight = stats?.userWeight || 70;
+        return total + calculateCaloriesForWorkout(workout, userWeight);
+      }, 0);
+  };
+
+  // Calculate calories for a workout based on type, value, unit, and user weight
+  const calculateCaloriesForWorkout = (workout: WorkoutProgress, userWeight: number): number => {
+    // Similar calorie calculation as in AdditionalWorkouts component
+    const { name, currentValue, unit, intensity } = workout;
+    const userWeightKg = userWeight > 0 ? userWeight : 70;
+    let intensityMultiplier = 1.0;
+    
+    // Set intensity based on the intensity level
+    if (intensity?.includes('Low') || intensity?.includes('Slow') || intensity?.includes('Light') || 
+        intensity?.includes('Gentle') || intensity?.includes('Beginner')) {
+      intensityMultiplier = 0.8;
+    } else if (intensity?.includes('High') || intensity?.includes('Fast') || intensity?.includes('Intense') || 
+               intensity?.includes('Power') || intensity?.includes('Advanced')) {
+      intensityMultiplier = 1.2;
+    }
+    
+    let baseCalories = 0;
+    
+    if (unit === 'minutes') {
+      // MET values (Metabolic Equivalent of Task)
+      let metValue = 1.0;
+      
+      if (name.toLowerCase().includes('running')) {
+        metValue = intensity?.includes('Slow') ? 7.0 : intensity?.includes('Fast') ? 12.0 : 9.0;
+      } else if (name.toLowerCase().includes('cycling')) {
+        metValue = intensity?.includes('Slow') ? 4.0 : intensity?.includes('Fast') ? 10.0 : 6.0;
+      } else if (name.toLowerCase().includes('walking')) {
+        metValue = intensity?.includes('Slow') ? 2.5 : intensity?.includes('Fast') ? 4.0 : 3.0;
+      } else if (name.toLowerCase().includes('swimming')) {
+        metValue = intensity?.includes('Slow') ? 5.0 : intensity?.includes('Fast') ? 8.0 : 6.0;
+      } else if (name.toLowerCase().includes('yoga') || name.toLowerCase().includes('pilates')) {
+        metValue = 2.5;
+      } else if (name.toLowerCase().includes('circuit') || name.toLowerCase().includes('hiit')) {
+        metValue = 6.0;
+      } else if (name.toLowerCase().includes('strength') || name.toLowerCase().includes('weight')) {
+        metValue = 3.5;
+      } else {
+        metValue = 3.0;
+      }
+      
+      baseCalories = metValue * userWeightKg * (currentValue / 60);
+    } else if (unit === 'km') {
+      if (name.toLowerCase().includes('running')) {
+        baseCalories = userWeightKg * 1.0 * currentValue;
+      } else if (name.toLowerCase().includes('cycling')) {
+        baseCalories = userWeightKg * 0.5 * currentValue;
+      } else if (name.toLowerCase().includes('walking')) {
+        baseCalories = userWeightKg * 0.6 * currentValue;
+      } else if (name.toLowerCase().includes('swimming')) {
+        baseCalories = userWeightKg * 2.0 * currentValue;
+      } else {
+        baseCalories = userWeightKg * 0.8 * currentValue;
+      }
+    } else if (unit === 'reps') {
+      if (name.toLowerCase().includes('push')) {
+        baseCalories = 0.1 * (1 + userWeightKg/100) * currentValue;
+      } else if (name.toLowerCase().includes('pull')) {
+        baseCalories = 0.15 * (1 + userWeightKg/100) * currentValue;
+      } else if (name.toLowerCase().includes('squat')) {
+        baseCalories = 0.15 * (1 + userWeightKg/100) * currentValue;
+      } else if (name.toLowerCase().includes('burpee')) {
+        baseCalories = 0.3 * (1 + userWeightKg/100) * currentValue;
+      } else if (name.toLowerCase().includes('lunge')) {
+        baseCalories = 0.1 * (1 + userWeightKg/100) * currentValue;
+      } else {
+        baseCalories = 0.12 * (1 + userWeightKg/100) * currentValue;
+      }
+    } else if (unit === 'meters') {
+      baseCalories = 0.06 * (1 + userWeightKg/100) * currentValue;
+    } else if (unit === 'seconds') {
+      baseCalories = (userWeightKg/70) * 0.05 * currentValue;
+    }
+    
+    return Math.round(baseCalories * intensityMultiplier);
+  };
+
+  const getIconForWorkoutType = (workoutType: string): string => {
+    // Map workout types to icons
+    const iconMap: Record<string, string> = {
+      'Running': 'run',
+      'Cycling': 'bike',
+      'Swimming': 'swim',
+      'Walking': 'walk',
+      'Push-ups': 'human-handsup',
+      'Pull-ups': 'arm-flex',
+      'Squats': 'human-male-height-variant',
+      'Planks': 'yoga',
+      'Static Stretching': 'yoga',
+      'Dynamic Stretching': 'yoga',
+      'Yoga': 'yoga',
+      'Pilates': 'yoga',
+      'Tai Chi': 'yoga',
+      'Circuit Training': 'weight-lifter',
+      'Burpees': 'arm-flex',
+      'Lunges': 'human-male-height-variant',
+      'Jumping Jacks': 'run',
+      'Sit-ups': 'human-handsup',
+    };
+    
+    return iconMap[workoutType] || 'dumbbell';
+  };
+
+  const cleanupIncompleteWorkouts = async () => {
+    if (!auth.currentUser) return;
+
+    try {
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+      const progressDoc = await getDoc(progressRef);
+      
+      if (progressDoc.exists()) {
+        const data = progressDoc.data();
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        
+        // Check each workout's progress
+        const updatedData: { [key: string]: any } = {};
+        let hasChanges = false;
+        
+        Object.entries(data).forEach(([workoutName, workoutData]: [string, any]) => {
+          const filteredDates: { [key: string]: any } = {};
+          
+          Object.entries(workoutData).forEach(([date, progress]: [string, any]) => {
+            // Keep the progress if:
+            // 1. It's not from yesterday or before, or
+            // 2. It has a value greater than 0 or is marked as completed
+            if (
+              date > yesterdayStr || 
+              (progress.value > 0 || progress.completed)
+            ) {
+              filteredDates[date] = progress;
+            } else {
+              hasChanges = true;
+            }
+          });
+          
+          if (Object.keys(filteredDates).length > 0) {
+            updatedData[workoutName] = filteredDates;
+          } else {
+            hasChanges = true;
+          }
+        });
+        
+        // Only update if we removed any data
+        if (hasChanges) {
+          await setDoc(progressRef, updatedData);
+        }
+      }
+    } catch (error) {
+      console.error('Error cleaning up incomplete workouts:', error);
+    }
+  };
+
+  // Add Stats Card to render XP and calories info
+  const renderStatsCard = () => {
+    if (!stats) return null;
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    return (
+      <View style={[styles.section, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
+        <View style={styles.sectionHeader}>
+          <MaterialCommunityIcons name="chart-box" size={24} color={currentTheme.colors.accent} />
+          <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
+            Today's Stats
+          </ThemedText>
+        </View>
+        <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <MaterialCommunityIcons name="fire" size={24} color={currentTheme.colors.accent} />
+            <ThemedText style={styles.statValue}>{stats.dailyCalories}</ThemedText>
+            <ThemedText style={styles.statLabel}>Calories Burned</ThemedText>
+          </View>
+          <View style={styles.statCard}>
+            <MaterialCommunityIcons name="star" size={24} color={currentTheme.colors.accent} />
+            <ThemedText style={styles.statValue}>{stats.dailyXP}/100</ThemedText>
+            <ThemedText style={styles.statLabel}>XP Earned Today</ThemedText>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  // Move render functions here, before they're used in loadingUI or mainUI
   const renderWorkoutItem = (workout: WorkoutProgress) => {
     return (
       <TouchableOpacity
@@ -1091,304 +1393,6 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
     );
-  };
-
-  const handleRemoveAdditionalWorkout = async (workout: WorkoutProgress) => {
-    if (!auth.currentUser || !stats) return;
-
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      
-      console.log("Removing additional workout:", workout.name, "Date:", workout.date);
-      
-      // Optimistic UI update - update local state immediately
-      const updatedAdditionalWorkouts = stats.additionalWorkouts.filter(
-        w => !(w.name === workout.name && w.timestamp === workout.timestamp)
-      );
-      
-      // Update local state immediately
-      setStats(prev => prev ? {
-        ...prev,
-        additionalWorkouts: updatedAdditionalWorkouts,
-        dailyCalories: calculateTotalDailyCalories([...prev.dailyWorkouts, ...updatedAdditionalWorkouts])
-      } : null);
-      
-      // Get reference to user's progress document
-      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
-      const progressDoc = await getDoc(progressRef);
-      
-      if (!progressDoc.exists()) {
-        console.log("Progress document doesn't exist");
-        return;
-      }
-      
-      const progressData = progressDoc.data();
-      
-      // Check if this workout exists in progress
-      if (!progressData[workout.name] || !progressData[workout.name][today]) {
-        console.log("Workout not found in progress data");
-        return;
-      }
-      
-      // Create updated progress data without this workout for today
-      const updatedWorkoutData = { ...progressData[workout.name] };
-      delete updatedWorkoutData[today];
-      
-      // If there are no more dates for this workout, remove the entire workout
-      if (Object.keys(updatedWorkoutData).length === 0) {
-        const updatedProgressData = { ...progressData };
-        delete updatedProgressData[workout.name];
-        await setDoc(progressRef, updatedProgressData);
-      } else {
-        // Otherwise, just update this workout's data
-        await updateDoc(progressRef, {
-          [`${workout.name}`]: updatedWorkoutData
-        });
-      }
-      
-      console.log(`Removed additional workout: ${workout.name}`);
-      
-      // Recalculate XP after workout change
-      await updateXPAfterWorkoutChange();
-      
-      // Refresh data in background without showing loading state
-      await loadDashboardData(true);
-    } catch (error) {
-      console.error('Error removing additional workout:', error);
-    }
-  };
-
-  const getIconForWorkoutType = (workoutType: string): string => {
-    // Map workout types to icons
-    const iconMap: Record<string, string> = {
-      'Running': 'run',
-      'Cycling': 'bike',
-      'Swimming': 'swim',
-      'Walking': 'walk',
-      'Push-ups': 'human-handsup',
-      'Pull-ups': 'arm-flex',
-      'Squats': 'human-male-height-variant',
-      'Planks': 'yoga',
-      'Static Stretching': 'yoga',
-      'Dynamic Stretching': 'yoga',
-      'Yoga': 'yoga',
-      'Pilates': 'yoga',
-      'Tai Chi': 'yoga',
-      'Circuit Training': 'weight-lifter',
-      'Burpees': 'arm-flex',
-      'Lunges': 'human-male-height-variant',
-      'Jumping Jacks': 'run',
-      'Sit-ups': 'human-handsup',
-    };
-    
-    return iconMap[workoutType] || 'dumbbell';
-  };
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadDashboardData(true);
-    setRefreshing(false);
-  }, []);
-
-  const cleanupIncompleteWorkouts = async () => {
-    if (!auth.currentUser) return;
-
-    try {
-      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
-      const progressDoc = await getDoc(progressRef);
-      
-      if (progressDoc.exists()) {
-        const data = progressDoc.data();
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
-        
-        // Check each workout's progress
-        const updatedData: { [key: string]: any } = {};
-        let hasChanges = false;
-        
-        Object.entries(data).forEach(([workoutName, workoutData]: [string, any]) => {
-          const filteredDates: { [key: string]: any } = {};
-          
-          Object.entries(workoutData).forEach(([date, progress]: [string, any]) => {
-            // Keep the progress if:
-            // 1. It's not from yesterday or before, or
-            // 2. It has a value greater than 0 or is marked as completed
-            if (
-              date > yesterdayStr || 
-              (progress.value > 0 || progress.completed)
-            ) {
-              filteredDates[date] = progress;
-            } else {
-              hasChanges = true;
-            }
-          });
-          
-          if (Object.keys(filteredDates).length > 0) {
-            updatedData[workoutName] = filteredDates;
-          } else {
-            hasChanges = true;
-          }
-        });
-        
-        // Only update if we removed any data
-        if (hasChanges) {
-          await setDoc(progressRef, updatedData);
-        }
-      }
-    } catch (error) {
-      console.error('Error cleaning up incomplete workouts:', error);
-    }
-  };
-
-  // Calculate total calories burned today from all workouts
-  const calculateTotalDailyCalories = (workouts: WorkoutProgress[]): number => {
-    const today = new Date().toISOString().split('T')[0];
-    
-    return workouts
-      .filter(workout => workout.date === today && workout.completed)
-      .reduce((total, workout) => {
-        // If calories are already calculated and stored, use those
-        if (workout.calories) {
-          return total + workout.calories;
-        }
-        
-        // Otherwise calculate calories based on workout data
-        const userWeight = stats?.userWeight || 70;
-        return total + calculateCaloriesForWorkout(workout, userWeight);
-      }, 0);
-  };
-
-  // Calculate calories for a workout based on type, value, unit, and user weight
-  const calculateCaloriesForWorkout = (workout: WorkoutProgress, userWeight: number): number => {
-    // Similar calorie calculation as in AdditionalWorkouts component
-    const { name, currentValue, unit, intensity } = workout;
-    const userWeightKg = userWeight > 0 ? userWeight : 70;
-    let intensityMultiplier = 1.0;
-    
-    // Set intensity based on the intensity level
-    if (intensity?.includes('Low') || intensity?.includes('Slow') || intensity?.includes('Light') || 
-        intensity?.includes('Gentle') || intensity?.includes('Beginner')) {
-      intensityMultiplier = 0.8;
-    } else if (intensity?.includes('High') || intensity?.includes('Fast') || intensity?.includes('Intense') || 
-               intensity?.includes('Power') || intensity?.includes('Advanced')) {
-      intensityMultiplier = 1.2;
-    }
-    
-    let baseCalories = 0;
-    
-    if (unit === 'minutes') {
-      // MET values (Metabolic Equivalent of Task)
-      let metValue = 1.0;
-      
-      if (name.toLowerCase().includes('running')) {
-        metValue = intensity?.includes('Slow') ? 7.0 : intensity?.includes('Fast') ? 12.0 : 9.0;
-      } else if (name.toLowerCase().includes('cycling')) {
-        metValue = intensity?.includes('Slow') ? 4.0 : intensity?.includes('Fast') ? 10.0 : 6.0;
-      } else if (name.toLowerCase().includes('walking')) {
-        metValue = intensity?.includes('Slow') ? 2.5 : intensity?.includes('Fast') ? 4.0 : 3.0;
-      } else if (name.toLowerCase().includes('swimming')) {
-        metValue = intensity?.includes('Slow') ? 5.0 : intensity?.includes('Fast') ? 8.0 : 6.0;
-      } else if (name.toLowerCase().includes('yoga') || name.toLowerCase().includes('pilates')) {
-        metValue = 2.5;
-      } else if (name.toLowerCase().includes('circuit') || name.toLowerCase().includes('hiit')) {
-        metValue = 6.0;
-      } else if (name.toLowerCase().includes('strength') || name.toLowerCase().includes('weight')) {
-        metValue = 3.5;
-      } else {
-        metValue = 3.0;
-      }
-      
-      baseCalories = metValue * userWeightKg * (currentValue / 60);
-    } else if (unit === 'km') {
-      if (name.toLowerCase().includes('running')) {
-        baseCalories = userWeightKg * 1.0 * currentValue;
-      } else if (name.toLowerCase().includes('cycling')) {
-        baseCalories = userWeightKg * 0.5 * currentValue;
-      } else if (name.toLowerCase().includes('walking')) {
-        baseCalories = userWeightKg * 0.6 * currentValue;
-      } else if (name.toLowerCase().includes('swimming')) {
-        baseCalories = userWeightKg * 2.0 * currentValue;
-      } else {
-        baseCalories = userWeightKg * 0.8 * currentValue;
-      }
-    } else if (unit === 'reps') {
-      if (name.toLowerCase().includes('push')) {
-        baseCalories = 0.1 * (1 + userWeightKg/100) * currentValue;
-      } else if (name.toLowerCase().includes('pull')) {
-        baseCalories = 0.15 * (1 + userWeightKg/100) * currentValue;
-      } else if (name.toLowerCase().includes('squat')) {
-        baseCalories = 0.15 * (1 + userWeightKg/100) * currentValue;
-      } else if (name.toLowerCase().includes('burpee')) {
-        baseCalories = 0.3 * (1 + userWeightKg/100) * currentValue;
-      } else if (name.toLowerCase().includes('lunge')) {
-        baseCalories = 0.1 * (1 + userWeightKg/100) * currentValue;
-      } else {
-        baseCalories = 0.12 * (1 + userWeightKg/100) * currentValue;
-      }
-    } else if (unit === 'meters') {
-      baseCalories = 0.06 * (1 + userWeightKg/100) * currentValue;
-    } else if (unit === 'seconds') {
-      baseCalories = (userWeightKg/70) * 0.05 * currentValue;
-    }
-    
-    return Math.round(baseCalories * intensityMultiplier);
-  };
-
-  // Add Stats Card to render XP and calories info
-  const renderStatsCard = () => {
-    if (!stats) return null;
-    
-    const today = new Date().toISOString().split('T')[0];
-    
-    return (
-      <View style={[styles.section, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
-        <View style={styles.sectionHeader}>
-          <MaterialCommunityIcons name="chart-box" size={24} color={currentTheme.colors.accent} />
-          <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
-            Today's Stats
-          </ThemedText>
-        </View>
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <MaterialCommunityIcons name="fire" size={24} color={currentTheme.colors.accent} />
-            <ThemedText style={styles.statValue}>{stats.dailyCalories}</ThemedText>
-            <ThemedText style={styles.statLabel}>Calories Burned</ThemedText>
-          </View>
-          <View style={styles.statCard}>
-            <MaterialCommunityIcons name="star" size={24} color={currentTheme.colors.accent} />
-            <ThemedText style={styles.statValue}>{stats.dailyXP}/100</ThemedText>
-            <ThemedText style={styles.statLabel}>XP Earned Today</ThemedText>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  // Function to get available intensities based on workout type
-  const getAvailableIntensitiesForWorkoutType = (workoutName: string): string[] => {
-    // Default intensities for all workouts
-    const defaultIntensities = ['Light', 'Medium', 'High'];
-    
-    // Customize intensities for specific workout types
-    const workoutTypeIntensitiesMap: Record<string, string[]> = {
-      'Running': ['Slow (5-6 km/h)', 'Medium (8-10 km/h)', 'Fast (12+ km/h)'],
-      'Walking': ['Slow (3 km/h)', 'Medium (4-5 km/h)', 'Fast (6+ km/h)'],
-      'Cycling': ['Slow (10-15 km/h)', 'Medium (15-25 km/h)', 'Fast (25+ km/h)'],
-      'Swimming': ['Slow', 'Medium', 'Fast'],
-      'Circuit Training': ['Light', 'Medium', 'Intense'],
-      'Yoga': ['Gentle', 'Regular', 'Power'],
-      'Pilates': ['Beginner', 'Intermediate', 'Advanced'],
-    };
-    
-    // Check if the workout name contains any of the keys
-    for (const [type, intensities] of Object.entries(workoutTypeIntensitiesMap)) {
-      if (workoutName.toLowerCase().includes(type.toLowerCase())) {
-        return intensities;
-      }
-    }
-    
-    return defaultIntensities;
   };
 
   // Prepare loading UI - but don't return early before all hooks are called
