@@ -10,6 +10,8 @@ export interface WorkoutProgress {
   date: string;
   timestamp: number;
   isAdditional?: boolean;
+  intensity?: string;
+  calories?: number;
 }
 
 export interface DailyProgress {
@@ -90,4 +92,19 @@ export function calculateLevel(totalXP: number): { level: number; xpForNextLevel
     xpForNextLevel: 0, 
     currentLevelXP: 0 
   };
+}
+
+export interface ProgressData {
+  [workoutName: string]: {
+    [date: string]: {
+      value: number;
+      completed: boolean;
+      timestamp: number;
+      date: string;
+      unit?: string;
+      intensity?: string;
+      isAdditional?: boolean;
+      calories?: number;
+    }
+  }
 } 
