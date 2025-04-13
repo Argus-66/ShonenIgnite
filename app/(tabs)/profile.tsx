@@ -740,8 +740,7 @@ export default function ProfileScreen() {
               const progressDate = new Date(date);
               if (
                 progressDate.getMonth() === selectedMonth.getMonth() &&
-                progressDate.getFullYear() === selectedMonth.getFullYear() &&
-                (progress.value > 0 || progress.completed)
+                progressDate.getFullYear() === selectedMonth.getFullYear()
               ) {
                 monthData[date] = (monthData[date] || 0) + 1;
                 max = Math.max(max, monthData[date]);
@@ -812,12 +811,21 @@ export default function ProfileScreen() {
       const data = progressDoc.data();
       const workoutsForDate: any[] = [];
       
+      // Get user weight for calorie calculations
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      const userWeight = userDoc.exists() ? userDoc.data().weight || 70 : 70;
+      
       // Process all workouts for the selected date
       Object.entries(data).forEach(([workoutType, dateEntries]: [string, any]) => {
         if (!dateEntries) return;
         
         if (dateEntries[formattedDate]) {
           const workoutData = dateEntries[formattedDate];
+          
+          // Skip workouts with 0 value
+          if (!workoutData.value || workoutData.value <= 0) {
+            return;
+          }
           
           // Get the workout icon based on type
           let icon = "dumbbell";
@@ -831,6 +839,19 @@ export default function ProfileScreen() {
           // Default unit based on workout type
           let unit = workoutData.unit || getDefaultUnitForWorkout(workoutType);
           
+          // Create a workout progress object for the calorie calculation
+          const workoutProgressObj = {
+            name: workoutType,
+            currentValue: workoutData.value || 0,
+            targetValue: 0, // Not needed for calorie calculation
+            completed: true,
+            unit: unit,
+            intensity: workoutData.intensity || 'Medium'
+          };
+          
+          // Calculate calories using the dashboard's calculation function
+          const calories = calculateCaloriesForWorkout(workoutProgressObj, userWeight);
+          
           // Add to workouts list
           workoutsForDate.push({
             name: workoutType,
@@ -838,7 +859,8 @@ export default function ProfileScreen() {
             value: workoutData.value || 0,
             unit: unit,
             timestamp: workoutData.timestamp || Date.now(),
-            calories: calculateCalories(workoutType, workoutData.value || 0, unit),
+            calories: calories,
+            intensity: workoutData.intensity || 'Medium'
           });
         }
       });
@@ -859,6 +881,82 @@ export default function ProfileScreen() {
     }
   };
   
+  // Calculate calories for a workout based on type, value, unit, intensity and user weight - matches dashboard calculation
+  const calculateCaloriesForWorkout = (workout: any, userWeight: number): number => {
+    // Similar calorie calculation as in index.tsx
+    const { name, currentValue, unit, intensity } = workout;
+    const userWeightKg = userWeight > 0 ? userWeight : 70;
+    let intensityMultiplier = 1.0;
+    
+    // Set intensity based on the intensity level
+    if (intensity?.includes('Low') || intensity?.includes('Slow') || intensity?.includes('Light') || 
+        intensity?.includes('Gentle') || intensity?.includes('Beginner')) {
+      intensityMultiplier = 0.8;
+    } else if (intensity?.includes('High') || intensity?.includes('Fast') || intensity?.includes('Intense') || 
+               intensity?.includes('Power') || intensity?.includes('Advanced')) {
+      intensityMultiplier = 1.2;
+    }
+    
+    let baseCalories = 0;
+    
+    if (unit === 'minutes') {
+      // MET values (Metabolic Equivalent of Task)
+      let metValue = 1.0;
+      
+      if (name.toLowerCase().includes('running')) {
+        metValue = intensity?.includes('Slow') ? 7.0 : intensity?.includes('Fast') ? 12.0 : 9.0;
+      } else if (name.toLowerCase().includes('cycling')) {
+        metValue = intensity?.includes('Slow') ? 4.0 : intensity?.includes('Fast') ? 10.0 : 6.0;
+      } else if (name.toLowerCase().includes('walking')) {
+        metValue = intensity?.includes('Slow') ? 2.5 : intensity?.includes('Fast') ? 4.0 : 3.0;
+      } else if (name.toLowerCase().includes('swimming')) {
+        metValue = intensity?.includes('Slow') ? 5.0 : intensity?.includes('Fast') ? 8.0 : 6.0;
+      } else if (name.toLowerCase().includes('yoga') || name.toLowerCase().includes('pilates')) {
+        metValue = 2.5;
+      } else if (name.toLowerCase().includes('circuit') || name.toLowerCase().includes('hiit')) {
+        metValue = 6.0;
+      } else if (name.toLowerCase().includes('strength') || name.toLowerCase().includes('weight')) {
+        metValue = 3.5;
+      } else {
+        metValue = 3.0;
+      }
+      
+      baseCalories = metValue * userWeightKg * (currentValue / 60);
+    } else if (unit === 'km') {
+      if (name.toLowerCase().includes('running')) {
+        baseCalories = userWeightKg * 1.0 * currentValue;
+      } else if (name.toLowerCase().includes('cycling')) {
+        baseCalories = userWeightKg * 0.5 * currentValue;
+      } else if (name.toLowerCase().includes('walking')) {
+        baseCalories = userWeightKg * 0.6 * currentValue;
+      } else if (name.toLowerCase().includes('swimming')) {
+        baseCalories = userWeightKg * 2.0 * currentValue;
+      } else {
+        baseCalories = userWeightKg * 0.8 * currentValue;
+      }
+    } else if (unit === 'reps') {
+      if (name.toLowerCase().includes('push')) {
+        baseCalories = 0.1 * (1 + userWeightKg/100) * currentValue;
+      } else if (name.toLowerCase().includes('pull')) {
+        baseCalories = 0.15 * (1 + userWeightKg/100) * currentValue;
+      } else if (name.toLowerCase().includes('squat')) {
+        baseCalories = 0.15 * (1 + userWeightKg/100) * currentValue;
+      } else if (name.toLowerCase().includes('burpee')) {
+        baseCalories = 0.3 * (1 + userWeightKg/100) * currentValue;
+      } else if (name.toLowerCase().includes('lunge')) {
+        baseCalories = 0.1 * (1 + userWeightKg/100) * currentValue;
+      } else {
+        baseCalories = 0.12 * (1 + userWeightKg/100) * currentValue;
+      }
+    } else if (unit === 'meters') {
+      baseCalories = 0.06 * (1 + userWeightKg/100) * currentValue;
+    } else if (unit === 'seconds') {
+      baseCalories = (userWeightKg/70) * 0.05 * currentValue;
+    }
+    
+    return Math.round(baseCalories * intensityMultiplier);
+  };
+
   // Helper function to get default unit based on workout type
   const getDefaultUnitForWorkout = (type: string): string => {
     switch(type.toLowerCase()) {
@@ -875,25 +973,6 @@ export default function ProfileScreen() {
       default:
         return 'reps';
     }
-  };
-  
-  // Helper function to calculate calories
-  const calculateCalories = (type: string, value: number, unit: string): number => {
-    // These are rough estimates and should be adjusted based on more accurate calculations
-    const caloriesPerUnit: Record<string, number> = {
-      running_km: 60,    // ~60 calories per km
-      cycling_km: 30,    // ~30 calories per km
-      walking_km: 45,    // ~45 calories per km
-      pushups_reps: 0.5, // ~0.5 calories per pushup
-      situps_reps: 0.25, // ~0.25 calories per situp
-      squats_reps: 0.3,  // ~0.3 calories per squat
-      plank_minutes: 5,  // ~5 calories per minute of plank
-    };
-    
-    const key = `${type.toLowerCase()}_${unit.toLowerCase()}`;
-    const caloriesPerUnitValue = caloriesPerUnit[key] || 0.2; // Default if not found
-    
-    return Math.round(value * caloriesPerUnitValue);
   };
 
   // Helper function to format date for the modal title
@@ -1337,7 +1416,7 @@ export default function ProfileScreen() {
                                 <ThemedText style={{ fontSize: 16, fontWeight: 'bold' }}>
                                   {workout.name}
                                 </ThemedText>
-                                <View style={{ flexDirection: 'row', marginTop: 4, alignItems: 'center' }}>
+                                <View style={{ flexDirection: 'row', marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                                   <ThemedText style={{ fontSize: 14 }}>
                                     {workout.value} {workout.unit}
                                   </ThemedText>
@@ -1350,6 +1429,18 @@ export default function ProfileScreen() {
                                   }}>
                                     <ThemedText style={{ fontSize: 12, fontWeight: '600' }}>
                                       {workout.calories} cal
+                                    </ThemedText>
+                                  </View>
+                                  <View style={{
+                                    backgroundColor: `${currentTheme.colors.text}15`,
+                                    paddingHorizontal: 8,
+                                    paddingVertical: 2,
+                                    borderRadius: 12,
+                                    marginLeft: 8,
+                                    marginTop: 4,
+                                  }}>
+                                    <ThemedText style={{ fontSize: 12, fontWeight: '600' }}>
+                                      {workout.intensity || 'Medium'} Intensity
                                     </ThemedText>
                                   </View>
                                 </View>
