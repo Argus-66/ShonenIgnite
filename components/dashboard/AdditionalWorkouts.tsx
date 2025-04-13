@@ -6,7 +6,8 @@ import {
   StyleSheet, 
   Modal, 
   TextInput, 
-  ScrollView 
+  ScrollView,
+  RefreshControl
 } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -21,6 +22,7 @@ interface AdditionalWorkoutsProps {
   onWorkoutRemoved: (workout: WorkoutProgress) => Promise<void>;
   updateXPAfterWorkoutChange: () => Promise<void>;
   userWeight: number;
+  isRefreshing?: boolean;
 }
 
 export const AdditionalWorkouts = ({
@@ -29,9 +31,10 @@ export const AdditionalWorkouts = ({
   onWorkoutAdded,
   onWorkoutRemoved,
   updateXPAfterWorkoutChange,
-  userWeight
+  userWeight,
+  isRefreshing
 }: AdditionalWorkoutsProps) => {
-  // State variables
+  // State variables - ensure all hooks are called unconditionally at the top
   const [showAddWorkoutModal, setShowAddWorkoutModal] = useState(false);
   const [additionalWorkoutType, setAdditionalWorkoutType] = useState('Running');
   const [additionalWorkoutValue, setAdditionalWorkoutValue] = useState('');
@@ -264,16 +267,6 @@ export const AdditionalWorkouts = ({
       
       console.log(`Adding additional workout: ${additionalWorkoutType} with value ${value} ${additionalWorkoutUnit} at intensity ${additionalWorkoutIntensity}`);
       
-      // Get reference to user's progress document
-      const userId = auth.currentUser?.uid;
-      if (!userId) {
-        console.error('User is not authenticated');
-        return;
-      }
-      
-      const progressRef = doc(db, 'daily_workout_progress', userId);
-      const progressDoc = await getDoc(progressRef);
-      
       // Calculate calories for this workout
       const calories = calculateCaloriesForWorkout(
         additionalWorkoutType, 
@@ -295,6 +288,38 @@ export const AdditionalWorkouts = ({
         isAdditional: true  // Mark as an additional workout
       };
       
+      // Create an optimistic workout to immediately add to UI
+      const newWorkout: WorkoutProgress = {
+        name: additionalWorkoutType,
+        icon: getIconForWorkoutType(additionalWorkoutType),
+        metric: '',
+        unit: additionalWorkoutUnit,
+        targetValue: value,
+        currentValue: value,
+        completed: true,
+        timestamp,
+        date: today,
+        workoutId: additionalWorkoutType.toLowerCase().replace(/\s+/g, '-'),
+        isAdditional: true,
+        calories: calories,
+        intensity: additionalWorkoutIntensity
+      };
+      
+      // Reset modal state first for responsive UI
+      setShowAddWorkoutModal(false);
+      setAdditionalWorkoutValue('');
+      setAdditionalWorkoutIntensity('Medium'); // Make sure to reset intensity to default
+      
+      // Get reference to user's progress document
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        console.error('User is not authenticated');
+        return;
+      }
+      
+      const progressRef = doc(db, 'daily_workout_progress', userId);
+      const progressDoc = await getDoc(progressRef);
+      
       // Update or create the progress document
       if (progressDoc.exists()) {
         await updateDoc(progressRef, {
@@ -313,10 +338,7 @@ export const AdditionalWorkouts = ({
       // Recalculate XP after workout change
       await updateXPAfterWorkoutChange();
       
-      // Reset state and reload data
-      setShowAddWorkoutModal(false);
-      setAdditionalWorkoutValue('');
-      setAdditionalWorkoutIntensity('Medium'); // Reset intensity to default
+      // Notify parent component for background data refresh
       await onWorkoutAdded();
     } catch (error) {
       console.error('Error adding additional workout:', error);
@@ -423,6 +445,7 @@ export const AdditionalWorkouts = ({
   };
 
   const renderAdditionalWorkouts = () => {
+    // Don't use hooks inside this render function
     if (!additionalWorkouts || additionalWorkouts.length === 0) {
       return (
         <View style={styles.emptyState}>
@@ -523,6 +546,13 @@ export const AdditionalWorkouts = ({
         style={styles.additionalWorkoutsScrollView} 
         showsVerticalScrollIndicator={true}
         nestedScrollEnabled={true}
+        refreshControl={isRefreshing !== undefined ? (
+          <RefreshControl 
+            refreshing={isRefreshing} 
+            colors={[currentTheme.colors.accent]}
+            tintColor={currentTheme.colors.accent}
+          />
+        ) : undefined}
       >
         {renderAdditionalWorkouts()}
       </ScrollView>
@@ -533,8 +563,11 @@ export const AdditionalWorkouts = ({
         transparent={true}
         visible={showAddWorkoutModal}
         onRequestClose={() => {
+          // Ensure all state is properly reset when closing the modal
           setShowAddWorkoutModal(false);
           setAdditionalWorkoutValue('');
+          setAdditionalWorkoutIntensity('Medium');
+          // Don't reset workout type or unit to avoid changing hook order
         }}
       >
         <View style={styles.modalContainer}>
@@ -640,8 +673,10 @@ export const AdditionalWorkouts = ({
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: currentTheme.colors.error }]}
                 onPress={() => {
+                  // Ensure consistent state reset
                   setShowAddWorkoutModal(false);
                   setAdditionalWorkoutValue('');
+                  setAdditionalWorkoutIntensity('Medium');
                 }}
               >
                 <Text style={styles.buttonText}>Cancel</Text>

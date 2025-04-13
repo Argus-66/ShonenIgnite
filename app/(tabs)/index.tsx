@@ -104,6 +104,7 @@ export default function DashboardScreen() {
     scale: new Animated.Value(1),
     rotation: new Animated.Value(0),
   })))[0];
+  const [workoutIntensity, setWorkoutIntensity] = useState('Medium');
 
   useEffect(() => {
     loadDashboardData();
@@ -132,10 +133,12 @@ export default function DashboardScreen() {
     }
   }, [showXPLimitToast]);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (skipLoadingState = false) => {
     if (!auth.currentUser) return;
 
-    setLoading(true);
+    if (!skipLoadingState) {
+      setLoading(true);
+    }
     
     try {
       const today = new Date().toISOString().split('T')[0];
@@ -211,7 +214,8 @@ export default function DashboardScreen() {
             date: todayProgress?.date || today, // Use the date from progress data if available
             workoutId: workout.name.toLowerCase().replace(/\s+/g, '-'), // Generate workoutId from name
             isAdditional: false, // Regular daily workout
-            calories: todayProgress?.calories || 0 // Get saved calories if available
+            calories: todayProgress?.calories || 0, // Get saved calories if available
+            intensity: todayProgress?.intensity || 'Medium' // Get saved intensity or use default
           };
         });
 
@@ -243,7 +247,8 @@ export default function DashboardScreen() {
               date: today,
               workoutId: workoutName.toLowerCase().replace(/\s+/g, '-'),
               isAdditional: true,
-              calories: todayEntry.calories || 0 // Get saved calories
+              calories: todayEntry.calories || 0, // Get saved calories
+              intensity: todayEntry.intensity || 'Medium' // Get saved intensity
             });
           }
         });
@@ -264,7 +269,9 @@ export default function DashboardScreen() {
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
-      setLoading(false);
+      if (!skipLoadingState) {
+        setLoading(false);
+      }
     }
   };
 
@@ -486,6 +493,32 @@ export default function DashboardScreen() {
       const today = new Date().toISOString().split('T')[0];
       const timestamp = Date.now();
       
+      // Optimistic UI update - update local state first
+      const updatedWorkouts = stats.dailyWorkouts.map(workout => {
+        if (workout.name === editingWorkout.name) {
+          return {
+            ...workout,
+            currentValue: value,
+            completed: value >= editingWorkout.targetValue,
+            intensity: editingWorkout.intensity || 'Medium' // Preserve intensity if exists
+          };
+        }
+        return workout;
+      });
+
+      // Calculate calories for this updated workout
+      const updatedWorkout = updatedWorkouts.find(w => w.name === editingWorkout.name);
+      if (updatedWorkout) {
+        updatedWorkout.calories = calculateCaloriesForWorkout(updatedWorkout, stats.userWeight);
+      }
+
+      // Update local state immediately
+      setStats(prev => prev ? {
+        ...prev,
+        dailyWorkouts: updatedWorkouts,
+        dailyCalories: calculateTotalDailyCalories([...updatedWorkouts, ...prev.additionalWorkouts])
+      } : null);
+      
       // Get reference to user's progress document
       const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
       const progressDoc = await getDoc(progressRef);
@@ -493,13 +526,21 @@ export default function DashboardScreen() {
       // Check if this update completes the workout
       const isCompleted = value >= editingWorkout.targetValue;
       
-      // Create new progress entry
+      // Calculate calories for this workout
+      const calories = calculateCaloriesForWorkout(
+        { ...editingWorkout, currentValue: value, completed: isCompleted }, 
+        stats.userWeight
+      );
+      
+      // Create new progress entry with calories and intensity
       const newProgress = {
         value: value,
         completed: isCompleted,
         timestamp,
         date: today,
-        unit: editingWorkout.unit
+        unit: editingWorkout.unit,
+        intensity: editingWorkout.intensity || 'Medium', // Save intensity
+        calories: calories // Store calculated calories
       };
       
       // Update or create the progress document
@@ -518,11 +559,13 @@ export default function DashboardScreen() {
       // Recalculate XP after workout change
       await updateXPAfterWorkoutChange();
       
-      // Reset state and reload data
+      // Reset state
       setShowEditModal(false);
       setProgressValue('');
       setEditingWorkout(null);
-      await loadDashboardData();
+      
+      // Refresh data in background without showing loading state
+      await loadDashboardData(true);
     } catch (error) {
       console.error('Error updating progress:', error);
     }
@@ -700,57 +743,12 @@ export default function DashboardScreen() {
   const handleCompleteWorkout = async (workout: WorkoutProgress) => {
     if (!auth.currentUser || !stats) return;
 
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const timestamp = Date.now();
-      
-      console.log(`Completing workout: ${workout.name} for today (${today})`);
-      
-      // Get reference to user's progress document
-      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
-      const progressDoc = await getDoc(progressRef);
-      
-      // Calculate calories for this workout
-      const calories = calculateCaloriesForWorkout(
-        { ...workout, currentValue: workout.targetValue }, 
-        stats.userWeight
-      );
-      
-      // Create new progress entry for completion with calories
-      const newProgress = {
-        value: workout.targetValue,
-        completed: true,
-        timestamp,
-        date: today,
-        unit: workout.unit,
-        calories: calories // Store calculated calories
-      };
-      
-      // Update or create the progress document
-      if (progressDoc.exists()) {
-        // Update the specific workout's progress
-        await updateDoc(progressRef, {
-          [`${workout.name}.${today}`]: newProgress
-        });
-        console.log(`Updated progress for ${workout.name} to completed with value ${workout.targetValue} ${workout.unit} (${calories} calories)`);
-      } else {
-        // Create new document with initial progress
-        await setDoc(progressRef, {
-          [workout.name]: {
-            [today]: newProgress
-          }
-        });
-        console.log(`Created new progress document for ${workout.name}`);
-      }
-
-      // Recalculate XP after workout change
-      await updateXPAfterWorkoutChange();
-      
-      // Reload dashboard data
-      await loadDashboardData();
-    } catch (error) {
-      console.error('Error completing workout:', error);
-    }
+    // Instead of completing the workout directly, open the edit modal
+    // with the target value pre-filled
+    setEditingWorkout(workout);
+    setProgressValue(workout.targetValue.toString());
+    setWorkoutIntensity(workout.intensity || 'Medium');
+    setShowEditModal(true);
   };
 
   const handleResetWorkout = async (workout: WorkoutProgress) => {
@@ -762,22 +760,48 @@ export default function DashboardScreen() {
       
       console.log("Resetting workout:", workout.name, "Completed status:", workout.completed, "Date:", workout.date);
       
-      // Get reference to user's progress document and user document
-      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
-      
       // Only reset workouts from today
       if (workout.date !== today) {
         console.log(`Cannot reset workout from ${workout.date} - only today's workouts can be reset`);
         return;
       }
       
-      // Create new progress entry with reset values
+      // Preserve the intensity even when resetting
+      const intensity = workout.intensity || 'Medium';
+      
+      // Optimistic UI update - update local state first
+      const updatedWorkouts = stats.dailyWorkouts.map(w => {
+        if (w.name === workout.name) {
+          return {
+            ...w,
+            currentValue: 0,
+            completed: false,
+            calories: 0,
+            intensity: intensity // Keep the intensity value
+          };
+        }
+        return w;
+      });
+
+      // Update local state immediately
+      setStats(prev => prev ? {
+        ...prev,
+        dailyWorkouts: updatedWorkouts,
+        dailyCalories: calculateTotalDailyCalories([...updatedWorkouts, ...prev.additionalWorkouts])
+      } : null);
+      
+      // Get reference to user's progress document
+      const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
+      
+      // Create new progress entry with reset values but preserve intensity
       const resetProgress = {
         value: 0,
         completed: false,
         timestamp,
         date: today,
-        unit: workout.unit
+        unit: workout.unit,
+        intensity: intensity, // Preserve intensity
+        calories: 0 // Reset calories
       };
       
       // Update progress document
@@ -790,8 +814,8 @@ export default function DashboardScreen() {
       // Recalculate XP after workout change
       await updateXPAfterWorkoutChange();
       
-      // Reload dashboard data
-      await loadDashboardData();
+      // Refresh data in background without showing loading state
+      await loadDashboardData(true);
     } catch (error) {
       console.error('Error resetting workout:', error);
     }
@@ -806,6 +830,33 @@ export default function DashboardScreen() {
       
       console.log("Starting complete all workouts process for today:", today);
       
+      // Optimistic UI update - update local state first
+      const updatedWorkouts = stats.dailyWorkouts.map(workout => {
+        // Preserve existing intensity or use default
+        const intensity = workout.intensity || 'Medium';
+        
+        // Calculate calories for this workout
+        const calories = calculateCaloriesForWorkout(
+          { ...workout, currentValue: workout.targetValue, completed: true, intensity }, 
+          stats.userWeight
+        );
+        
+        return {
+          ...workout,
+          currentValue: workout.targetValue,
+          completed: true,
+          calories: calories,
+          intensity: intensity
+        };
+      });
+
+      // Update local state immediately
+      setStats(prev => prev ? {
+        ...prev,
+        dailyWorkouts: updatedWorkouts,
+        dailyCalories: calculateTotalDailyCalories([...updatedWorkouts, ...prev.additionalWorkouts])
+      } : null);
+      
       // Get progress document reference
       const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
       const progressDoc = await getDoc(progressRef);
@@ -815,9 +866,12 @@ export default function DashboardScreen() {
       
       // Mark each workout as completed with target value
       stats.dailyWorkouts.forEach(workout => {
+        // Preserve existing intensity or use default
+        const intensity = workout.intensity || 'Medium';
+        
         // Calculate calories for this workout
         const calories = calculateCaloriesForWorkout(
-          { ...workout, currentValue: workout.targetValue }, 
+          { ...workout, currentValue: workout.targetValue, intensity }, 
           stats.userWeight
         );
         
@@ -828,6 +882,7 @@ export default function DashboardScreen() {
           timestamp,
           date: today,
           unit: workout.unit,
+          intensity: intensity, // Store intensity value
           calories: calories // Store calculated calories
         };
         
@@ -844,9 +899,12 @@ export default function DashboardScreen() {
         const initialData: Record<string, any> = {};
         
         stats.dailyWorkouts.forEach(workout => {
+          // Preserve existing intensity or use default
+          const intensity = workout.intensity || 'Medium';
+          
           // Calculate calories for this workout
           const calories = calculateCaloriesForWorkout(
-            { ...workout, currentValue: workout.targetValue }, 
+            { ...workout, currentValue: workout.targetValue, intensity }, 
             stats.userWeight
           );
           
@@ -857,6 +915,7 @@ export default function DashboardScreen() {
               timestamp,
               date: today,
               unit: workout.unit,
+              intensity: intensity, // Store intensity value
               calories: calories
             }
           };
@@ -870,8 +929,8 @@ export default function DashboardScreen() {
       // Recalculate XP after workout change
       await updateXPAfterWorkoutChange();
       
-      // Reload dashboard data
-      await loadDashboardData();
+      // Refresh data in background without showing loading state
+      await loadDashboardData(true);
     } catch (error) {
       console.error('Error completing all workouts:', error);
     }
@@ -888,19 +947,22 @@ export default function DashboardScreen() {
     return workout?.icon || 'dumbbell';
   };
 
+  const handleOpenEditModal = (workout: WorkoutProgress) => {
+    setEditingWorkout(workout);
+    setProgressValue(workout.currentValue.toString());
+    setWorkoutIntensity(workout.intensity || 'Medium');
+    setShowEditModal(true);
+  };
+
   const renderWorkoutItem = (workout: WorkoutProgress) => {
-  return (
+    return (
       <TouchableOpacity
         key={`${workout.workoutId}-${workout.timestamp}`}
         style={[styles.workoutItem, {
           backgroundColor: `${currentTheme.colors.accent}15`,
           borderColor: currentTheme.colors.accent,
         }]}
-        onPress={() => {
-          setEditingWorkout(workout);
-          setProgressValue(workout.currentValue.toString());
-          setShowEditModal(true);
-        }}
+        onPress={() => handleOpenEditModal(workout)}
       >
         <View style={styles.workoutItemLeft}>
           <View style={[styles.workoutIcon, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
@@ -913,10 +975,10 @@ export default function DashboardScreen() {
           <View style={styles.workoutInfo}>
             <ThemedText style={[styles.workoutName, { color: currentTheme.colors.accent }]}>
               {workout.name}
-        </ThemedText>
+            </ThemedText>
             <ThemedText style={[styles.workoutTime, { color: `${currentTheme.colors.accent}99` }]}>
               {new Date(workout.timestamp).toLocaleTimeString()}
-        </ThemedText>
+            </ThemedText>
             <View style={[styles.progressBarContainer, { marginTop: 8 }]}>
               <View 
                 style={[
@@ -927,6 +989,29 @@ export default function DashboardScreen() {
                   }
                 ]} 
               />
+            </View>
+            
+            {/* Display intensity tag and calories if present */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+              {workout.intensity && (
+                <View style={{ 
+                  backgroundColor: `${currentTheme.colors.accent}30`, 
+                  paddingHorizontal: 8, 
+                  paddingVertical: 2, 
+                  borderRadius: 12,
+                  marginRight: 8
+                }}>
+                  <ThemedText style={{ fontSize: 12, color: currentTheme.colors.accent }}>
+                    {workout.intensity}
+                  </ThemedText>
+                </View>
+              )}
+              
+              {workout.currentValue > 0 && (
+                <ThemedText style={[styles.caloriesText, { color: `${currentTheme.colors.accent}99` }]}>
+                  ~{workout.calories || calculateCaloriesForWorkout(workout, stats?.userWeight || 70)} cal
+                </ThemedText>
+              )}
             </View>
           </View>
         </View>
@@ -1016,6 +1101,18 @@ export default function DashboardScreen() {
       
       console.log("Removing additional workout:", workout.name, "Date:", workout.date);
       
+      // Optimistic UI update - update local state immediately
+      const updatedAdditionalWorkouts = stats.additionalWorkouts.filter(
+        w => !(w.name === workout.name && w.timestamp === workout.timestamp)
+      );
+      
+      // Update local state immediately
+      setStats(prev => prev ? {
+        ...prev,
+        additionalWorkouts: updatedAdditionalWorkouts,
+        dailyCalories: calculateTotalDailyCalories([...prev.dailyWorkouts, ...updatedAdditionalWorkouts])
+      } : null);
+      
       // Get reference to user's progress document
       const progressRef = doc(db, 'daily_workout_progress', auth.currentUser.uid);
       const progressDoc = await getDoc(progressRef);
@@ -1054,8 +1151,8 @@ export default function DashboardScreen() {
       // Recalculate XP after workout change
       await updateXPAfterWorkoutChange();
       
-      // Reload dashboard data
-      await loadDashboardData();
+      // Refresh data in background without showing loading state
+      await loadDashboardData(true);
     } catch (error) {
       console.error('Error removing additional workout:', error);
     }
@@ -1089,7 +1186,7 @@ export default function DashboardScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadDashboardData();
+    await loadDashboardData(true);
     setRefreshing(false);
   }, []);
 
@@ -1268,17 +1365,43 @@ export default function DashboardScreen() {
     );
   };
 
-  if (loading || !stats) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.container}>
-          <ThemedText>Loading dashboard...</ThemedText>
-      </ThemedView>
-      </SafeAreaView>
-    );
-  }
+  // Function to get available intensities based on workout type
+  const getAvailableIntensitiesForWorkoutType = (workoutName: string): string[] => {
+    // Default intensities for all workouts
+    const defaultIntensities = ['Light', 'Medium', 'High'];
+    
+    // Customize intensities for specific workout types
+    const workoutTypeIntensitiesMap: Record<string, string[]> = {
+      'Running': ['Slow (5-6 km/h)', 'Medium (8-10 km/h)', 'Fast (12+ km/h)'],
+      'Walking': ['Slow (3 km/h)', 'Medium (4-5 km/h)', 'Fast (6+ km/h)'],
+      'Cycling': ['Slow (10-15 km/h)', 'Medium (15-25 km/h)', 'Fast (25+ km/h)'],
+      'Swimming': ['Slow', 'Medium', 'Fast'],
+      'Circuit Training': ['Light', 'Medium', 'Intense'],
+      'Yoga': ['Gentle', 'Regular', 'Power'],
+      'Pilates': ['Beginner', 'Intermediate', 'Advanced'],
+    };
+    
+    // Check if the workout name contains any of the keys
+    for (const [type, intensities] of Object.entries(workoutTypeIntensitiesMap)) {
+      if (workoutName.toLowerCase().includes(type.toLowerCase())) {
+        return intensities;
+      }
+    }
+    
+    return defaultIntensities;
+  };
 
-  return (
+  // Prepare loading UI - but don't return early before all hooks are called
+  const loadingUI = (
+    <SafeAreaView style={styles.safeArea}>
+      <ThemedView style={styles.container}>
+        <ThemedText>Loading dashboard...</ThemedText>
+      </ThemedView>
+    </SafeAreaView>
+  );
+  
+  // Main UI for when data is loaded
+  const mainUI = (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
       <StatusBar
         barStyle="light-content"
@@ -1307,81 +1430,88 @@ export default function DashboardScreen() {
                 Welcome back,
               </ThemedText>
               <ThemedText style={[styles.username, { color: currentTheme.colors.accent }]}>
-                {stats.username}
+                {stats?.username}
               </ThemedText>
             </View>
             <View style={[styles.coinsContainer, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
               <MaterialCommunityIcons name="currency-usd" size={20} color={currentTheme.colors.accent} />
               <ThemedText style={[styles.coinsText, { color: currentTheme.colors.accent }]}>
-                {stats.coins}
+                {stats?.coins}
               </ThemedText>
             </View>
           </View>
 
           {/* Level Progress */}
-          <View style={[styles.section, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
-            <View style={styles.sectionHeader}>
-              <MaterialCommunityIcons name="star" size={24} color={currentTheme.colors.accent} />
-              <View style={styles.levelInfo}>
-                <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
-                  Level {stats.stats.level}
+          {stats && (
+            <View style={[styles.section, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
+              <View style={styles.sectionHeader}>
+                <MaterialCommunityIcons name="star" size={24} color={currentTheme.colors.accent} />
+                <View style={styles.levelInfo}>
+                  <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
+                    Level {stats.stats.level}
+                  </ThemedText>
+                  <ThemedText style={[styles.totalXP, { color: currentTheme.colors.accent }]}>
+                    Total XP: {stats.stats.totalXP}
+                  </ThemedText>
+                </View>
+              </View>
+              <View style={styles.progressBarContainer}>
+                <View 
+                  style={[
+                    styles.progressBar, 
+                    { 
+                      width: `${(stats.stats.currentLevelXP / stats.stats.xpForNextLevel) * 100}%`,
+                      backgroundColor: currentTheme.colors.accent 
+                    }
+                  ]} 
+                />
+              </View>
+              <View style={styles.xpInfoContainer}>
+                <ThemedText style={[styles.xpText, { color: currentTheme.colors.accent }]}>
+                  {stats.stats.currentLevelXP} / {stats.stats.xpForNextLevel} XP
                 </ThemedText>
-                <ThemedText style={[styles.totalXP, { color: currentTheme.colors.accent }]}>
-                  Total XP: {stats.stats.totalXP}
+                <ThemedText style={[styles.xpNeeded, { color: currentTheme.colors.accent }]}>
+                  {stats.stats.xpForNextLevel - stats.stats.currentLevelXP} XP needed for Level {stats.stats.level + 1}
                 </ThemedText>
               </View>
             </View>
-            <View style={styles.progressBarContainer}>
-              <View 
-                style={[
-                  styles.progressBar, 
-                  { 
-                    width: `${(stats.stats.currentLevelXP / stats.stats.xpForNextLevel) * 100}%`,
-                    backgroundColor: currentTheme.colors.accent 
-                  }
-                ]} 
-              />
-            </View>
-            <View style={styles.xpInfoContainer}>
-              <ThemedText style={[styles.xpText, { color: currentTheme.colors.accent }]}>
-                {stats.stats.currentLevelXP} / {stats.stats.xpForNextLevel} XP
-              </ThemedText>
-              <ThemedText style={[styles.xpNeeded, { color: currentTheme.colors.accent }]}>
-                {stats.stats.xpForNextLevel - stats.stats.currentLevelXP} XP needed for Level {stats.stats.level + 1}
-              </ThemedText>
-            </View>
-          </View>
+          )}
 
           {/* Today's Stats */}
           {renderStatsCard()}
 
           {/* Daily Workouts */}
-          <View style={[styles.section, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
-            <View style={styles.sectionHeader}>
-              <MaterialCommunityIcons name="dumbbell" size={24} color={currentTheme.colors.accent} />
-              <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
-                Daily Workouts
-              </ThemedText>
+          {stats && (
+            <View style={[styles.section, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
+              <View style={styles.sectionHeader}>
+                <MaterialCommunityIcons name="dumbbell" size={24} color={currentTheme.colors.accent} />
+                <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
+                  Daily Workouts
+                </ThemedText>
+              </View>
+              <ScrollView 
+                style={styles.workoutsScrollView} 
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled={true}
+              >
+                {renderDailyWorkouts()}
+              </ScrollView>
             </View>
-            <ScrollView 
-              style={styles.workoutsScrollView} 
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled={true}
-            >
-              {renderDailyWorkouts()}
-            </ScrollView>
-          </View>
+          )}
 
           {/* Additional Workouts */}
-          <AdditionalWorkouts 
-            additionalWorkouts={stats.additionalWorkouts}
-            currentTheme={currentTheme}
-            onWorkoutAdded={loadDashboardData}
-            onWorkoutRemoved={handleRemoveAdditionalWorkout}
-            updateXPAfterWorkoutChange={updateXPAfterWorkoutChange}
-            userWeight={stats.userWeight}
-          />
-      </ThemedView>
+          {stats && (
+            <AdditionalWorkouts 
+              additionalWorkouts={stats.additionalWorkouts}
+              currentTheme={currentTheme}
+              onWorkoutAdded={() => loadDashboardData(true)}
+              onWorkoutRemoved={handleRemoveAdditionalWorkout}
+              updateXPAfterWorkoutChange={updateXPAfterWorkoutChange}
+              userWeight={stats.userWeight}
+              isRefreshing={refreshing}
+            />
+          )}
+        </ThemedView>
       </ScrollView>
 
       {/* Edit Progress Modal */}
@@ -1393,6 +1523,7 @@ export default function DashboardScreen() {
           setShowEditModal(false);
           setProgressValue('');
           setEditingWorkout(null);
+          setWorkoutIntensity('Medium');
         }}
       >
         <View style={{
@@ -1418,6 +1549,14 @@ export default function DashboardScreen() {
             }}>
               Update {editingWorkout?.name} Progress
             </Text>
+            
+            <Text style={{
+              fontSize: 16, 
+              marginBottom: 8, 
+              color: currentTheme.colors.text
+            }}>
+              Value
+            </Text>
             <TextInput
               style={{
                 height: 48,
@@ -1436,6 +1575,73 @@ export default function DashboardScreen() {
               placeholder={`Enter value in ${editingWorkout?.unit}`}
               placeholderTextColor={`${currentTheme.colors.text}50`}
             />
+
+            {/* Intensity Selection */}
+            {editingWorkout && (
+              <>
+                <Text style={{
+                  fontSize: 16, 
+                  marginBottom: 8, 
+                  color: currentTheme.colors.text
+                }}>
+                  Intensity
+                </Text>
+                <View style={{ 
+                  flexDirection: 'row', 
+                  marginBottom: 16, 
+                  flexWrap: 'wrap',
+                  gap: 8,
+                }}>
+                  {getAvailableIntensitiesForWorkoutType(editingWorkout.name).map((intensity: string) => (
+                    <TouchableOpacity
+                      key={intensity}
+                      style={{
+                        paddingVertical: 8,
+                        paddingHorizontal: 16,
+                        borderRadius: 24,
+                        borderWidth: 1,
+                        borderColor: currentTheme.colors.accent,
+                        backgroundColor: workoutIntensity === intensity ? currentTheme.colors.accent : 'transparent',
+                      }}
+                      onPress={() => setWorkoutIntensity(intensity)}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: '500',
+                          color: workoutIntensity === intensity ? '#fff' : currentTheme.colors.text,
+                        }}
+                      >
+                        {intensity}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {/* Estimated Calories */}
+            {editingWorkout && (
+              <View style={{
+                marginBottom: 20,
+                padding: 12,
+                backgroundColor: `${currentTheme.colors.accent}15`,
+                borderRadius: 8,
+              }}>
+                <Text style={{
+                  fontSize: 14,
+                  color: currentTheme.colors.text,
+                  textAlign: 'center',
+                }}>
+                  Estimated calories: {calculateCaloriesForWorkout({ 
+                    ...editingWorkout, 
+                    currentValue: parseFloat(progressValue) || 0,
+                    intensity: workoutIntensity
+                  }, stats?.userWeight || 70)} cal
+                </Text>
+              </View>
+            )}
+            
             <View style={{
               flexDirection: 'row',
               justifyContent: 'flex-end',
@@ -1454,6 +1660,7 @@ export default function DashboardScreen() {
                   setShowEditModal(false);
                   setProgressValue('');
                   setEditingWorkout(null);
+                  setWorkoutIntensity('Medium');
                 }}
               >
                 <Text style={{
@@ -1471,7 +1678,17 @@ export default function DashboardScreen() {
                   alignItems: 'center',
                   backgroundColor: currentTheme.colors.accent
                 }}
-                onPress={handleUpdateProgress}
+                onPress={() => {
+                  if (editingWorkout) {
+                    // Update the workout with the new intensity
+                    const updatedWorkout = { 
+                      ...editingWorkout,
+                      intensity: workoutIntensity
+                    };
+                    setEditingWorkout(updatedWorkout);
+                    handleUpdateProgress();
+                  }
+                }}
               >
                 <Text style={{
                   color: '#fff',
@@ -1485,6 +1702,9 @@ export default function DashboardScreen() {
       </Modal>
     </SafeAreaView>
   );
+
+  // Return after all hooks are initialized
+  return loading || !stats ? loadingUI : mainUI;
 }
 
 const styles = StyleSheet.create({
@@ -1753,6 +1973,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.8,
     marginTop: 5,
+  },
+  caloriesText: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginTop: 4,
   },
 });
 
