@@ -1398,6 +1398,10 @@ export default function DashboardScreen() {
   // Prepare loading UI - but don't return early before all hooks are called
   const loadingUI = (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar
+        barStyle={currentTheme.mode === 'dark' ? "light-content" : "dark-content"}
+        backgroundColor={currentTheme.colors.background}
+      />
       <ThemedView style={styles.container}>
         <ThemedText>Loading dashboard...</ThemedText>
       </ThemedView>
@@ -1408,7 +1412,7 @@ export default function DashboardScreen() {
   const mainUI = (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
       <StatusBar
-        barStyle="light-content"
+        barStyle={currentTheme.mode === 'dark' ? "light-content" : "dark-content"}
         backgroundColor={currentTheme.colors.background}
       />
       {renderXPLimitToast()}
@@ -1714,7 +1718,6 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   container: {
     flex: 1,
