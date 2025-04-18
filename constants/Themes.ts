@@ -198,15 +198,15 @@ const lightThemes: Record<string, Theme> = {
     colors: {
       primary: '#FFFFFF',
       secondary: '#455A64', // Darker steel blue for contrast
-      accent: '#FF8F00',    // Brighter amber for mobile visibility
-      accent2: '#BF360C',   // Gear red/orange
+      accent: '#E53935',    // Changed from amber (#FF8F00) to red
+      accent2: '#B71C1C',   // Changed from orange (#BF360C) to darker red
       textPrimary: '#263238',
       textSecondary: '#37474F',
       background: '#ECEFF1', // Light bluish-gray background
       text: '#263238',
-      card: '#E1F5FE',
-      border: '#455A64',    // Stronger border for better visibility
-      error: '#D84315',
+      card: '#FFEBEE',      // Changed from light blue to light red
+      border: '#455A64',    // Kept for better visibility
+      error: '#C62828',     // Darker red error
     },
   },
 };

@@ -16,17 +16,17 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // If user is already authenticated, redirect to the main app
-  if (isAuthenticated && !isInitializing) {
-    return <Redirect href="/(tabs)" />;
-  }
-
   // Update local error state when auth context error changes
   useEffect(() => {
     if (authError) {
       setError(authError);
     }
   }, [authError]);
+
+  // If user is already authenticated, redirect to the main app
+  if (isAuthenticated && !isInitializing) {
+    return <Redirect href="/(tabs)" />;
+  }
 
   const handleLogin = async () => {
     if (!formData.email || !formData.password) {
