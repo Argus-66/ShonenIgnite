@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ThemedText } from '@/components/ThemedText';
 import ProfileImage from '@/components/ProfileImage';
@@ -27,7 +27,7 @@ interface LeaderboardItemProps {
   onFollowToggle: (userId: string) => void;
 }
 
-export const LeaderboardItem = ({ user, isCurrentUser, onPress, onFollowToggle }: LeaderboardItemProps) => {
+export const LeaderboardItem = ({ user, isCurrentUser, isTopThree, onPress, onFollowToggle }: LeaderboardItemProps) => {
   const { currentTheme } = useTheme();
   
   // Format the XP value with commas
@@ -38,59 +38,120 @@ export const LeaderboardItem = ({ user, isCurrentUser, onPress, onFollowToggle }
     ? (user.currentXp || 0) / user.xpForNextLevel * 100 
     : 0;
   
+  // Get medal color based on rank
+  const getMedalColor = () => {
+    if (user.rank === 1) return currentTheme.colors.leaderboard?.firstPlaceAccent || '#FFD700'; // Gold
+    if (user.rank === 2) return currentTheme.colors.leaderboard?.secondPlaceAccent || '#C0C0C0'; // Silver
+    if (user.rank === 3) return currentTheme.colors.leaderboard?.thirdPlaceAccent || '#CD7F32'; // Bronze
+    return currentTheme.colors.accent;
+  };
+  
+  // Get medal icon based on rank
+  const getMedalIcon = () => {
+    if (user.rank === 1) return 'trophy';
+    if (user.rank === 2) return 'medal';
+    if (user.rank === 3) return 'medal-outline';
+    return 'numeric'; // Default icon instead of null
+  };
+  
+  const isTopRank = user.rank <= 3;
+  const medalColor = getMedalColor();
+  const medalIcon = getMedalIcon();
+
   return (
     <TouchableOpacity 
       style={[
         styles.container, 
+        { backgroundColor: currentTheme.colors.leaderboard?.rankCardBackground || currentTheme.colors.card },
+        isTopRank && {
+          borderWidth: 2,
+          borderColor: medalColor,
+          shadowColor: medalColor,
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.5,
+          shadowRadius: 5,
+          elevation: 8,
+        },
         isCurrentUser && { 
-          backgroundColor: currentTheme.colors.cardHighlight,
+          backgroundColor: currentTheme.colors.leaderboard?.userHighlightBackground || currentTheme.colors.accent2,
           borderColor: currentTheme.colors.accent,
           borderWidth: 2
         }
       ]}
       onPress={() => onPress(user.id)}
     >
-      {/* Rank Circle */}
-      <View style={[styles.rankCircle, { backgroundColor: currentTheme.colors.accent }]}>
-        <ThemedText style={styles.rankText}>{user.rank}</ThemedText>
+      {/* Rank Circle with Medal for Top 3 */}
+      <View style={[
+        styles.rankCircle, 
+        { backgroundColor: isTopRank ? medalColor : currentTheme.colors.accent },
+        isTopRank && styles.topRankCircle
+      ]}>
+        {isTopRank ? (
+          <MaterialCommunityIcons name={medalIcon} size={20} color="white" />
+        ) : (
+          <Text style={[styles.rankText, { color: currentTheme.colors.textPrimary }]}>{user.rank}</Text>
+        )}
       </View>
       
-      {/* Profile Image */}
-      <ProfileImage 
-        themeName={user.theme || 'Dragon Ball'} 
-        size={50} 
-      />
+      {/* Profile Image with Premium Border for Top 3 */}
+      <View style={isTopRank ? [styles.profileImageWrapper, { borderColor: medalColor }] : null}>
+        <ProfileImage 
+          themeName={user.theme || 'Dragon Ball'} 
+          size={isTopRank ? 55 : 50} 
+        />
+      </View>
       
       {/* User Info */}
       <View style={styles.userInfo}>
         <View style={styles.nameContainer}>
-          <ThemedText style={styles.username}>
+          <ThemedText style={[
+            styles.username,
+            isTopRank && { fontSize: 18, fontWeight: 'bold' }
+          ]}>
             {user.username}
             {isCurrentUser && <Text style={{color: currentTheme.colors.accent}}> (You)</Text>}
           </ThemedText>
+          
+          {/* Display rank for top 3 since we're showing a medal in the circle */}
+          {isTopRank && (
+            <ThemedText style={[styles.rankLabel, { color: medalColor }]}>
+              #{user.rank}
+            </ThemedText>
+          )}
         </View>
         
         <View style={styles.statsContainer}>
           <View style={styles.levelContainer}>
-            <FontAwesome5 name="star" size={14} color={currentTheme.colors.gold} />
+            <FontAwesome5 
+              name="star" 
+              size={14} 
+              color={isTopRank ? medalColor : currentTheme.colors.accent} 
+            />
             <ThemedText style={styles.levelText}>Level {user.level}</ThemedText>
           </View>
           
           <View style={styles.xpContainer}>
-            <FontAwesome5 name="bolt" size={14} color={currentTheme.colors.accent} />
+            <FontAwesome5 
+              name="bolt" 
+              size={14} 
+              color={isTopRank ? medalColor : currentTheme.colors.accent} 
+            />
             <ThemedText style={styles.xpText}>{formattedXP} XP</ThemedText>
           </View>
         </View>
         
         {/* Progress Bar */}
         {user.xpForNextLevel !== undefined && user.xpForNextLevel > 0 && (
-          <View style={[styles.progressBarContainer, { backgroundColor: currentTheme.colors.cardSecondary }]}>
+          <View style={[
+            styles.progressBarContainer, 
+            { backgroundColor: currentTheme.colors.leaderboard?.podiumBackground || currentTheme.colors.secondary }
+          ]}>
             <View 
               style={[
                 styles.progressBar, 
                 { 
                   width: `${progressPercentage}%`, 
-                  backgroundColor: currentTheme.colors.accent 
+                  backgroundColor: isTopRank ? medalColor : currentTheme.colors.accent 
                 }
               ]} 
             />
@@ -108,8 +169,8 @@ export const LeaderboardItem = ({ user, isCurrentUser, onPress, onFollowToggle }
             styles.followButton, 
             { 
               backgroundColor: user.isFollowed 
-                ? currentTheme.colors.cardSecondary 
-                : currentTheme.colors.accent 
+                ? currentTheme.colors.secondary
+                : isTopRank ? medalColor : currentTheme.colors.accent 
             }
           ]}
           onPress={() => onFollowToggle(user.id)}
@@ -117,7 +178,7 @@ export const LeaderboardItem = ({ user, isCurrentUser, onPress, onFollowToggle }
           <Ionicons 
             name={user.isFollowed ? "person-remove" : "person-add"} 
             size={16} 
-            color={user.isFollowed ? currentTheme.colors.text : currentTheme.colors.white} 
+            color={user.isFollowed ? currentTheme.colors.textPrimary : currentTheme.colors.textPrimary} 
           />
         </TouchableOpacity>
       )}
@@ -133,7 +194,6 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     borderRadius: 16,
     alignItems: 'center',
-    backgroundColor: '#1A1A1A',
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -151,10 +211,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+  topRankCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    marginRight: 14,
+  },
   rankText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: 'white'
+  },
+  profileImageWrapper: {
+    width: 59,
+    height: 59,
+    borderRadius: 30,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
   profileImage: {
     width: 50,
@@ -173,6 +247,11 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  rankLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
   statsContainer: {
     flexDirection: 'row',

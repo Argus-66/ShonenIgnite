@@ -13,6 +13,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import { Link, router } from 'expo-router';
 import { updateXpCalcData } from '@/utils/xpCalcService';
 import { AdditionalWorkouts } from '@/components/dashboard/AdditionalWorkouts';
+import { MetallicBackgroundWrapper } from '@/components/dashboard/MetallicBackgroundWrapper';
 
 interface DashboardStats {
   username: string;
@@ -1410,309 +1411,312 @@ export default function DashboardScreen() {
   
   // Main UI for when data is loaded
   const mainUI = (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.colors.background }]}>
-      <StatusBar
-        barStyle={currentTheme.mode === 'dark' ? "light-content" : "dark-content"}
-        backgroundColor={currentTheme.colors.background}
-      />
-      {renderXPLimitToast()}
-      <ScrollView 
-        style={styles.mainScrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[currentTheme.colors.accent]}
-            tintColor={currentTheme.colors.accent}
-          />
-        }
-      >
-        <ThemedView style={styles.container}>
-          {renderCelebration()}
+    <MetallicBackgroundWrapper>
+      <SafeAreaView style={[styles.safeArea]}>
+        <StatusBar
+          barStyle={currentTheme.mode === 'dark' ? "light-content" : "dark-content"}
+          backgroundColor="transparent"
+          translucent={true}
+        />
+        {renderXPLimitToast()}
+        <ScrollView 
+          style={styles.mainScrollView}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[currentTheme.colors.accent]}
+              tintColor={currentTheme.colors.accent}
+            />
+          }
+        >
+          <ThemedView style={styles.container}>
+            {renderCelebration()}
 
-          {/* Header */}
-          <View style={styles.header}>
-            <View>
-              <ThemedText style={[styles.welcomeText, { color: currentTheme.colors.accent }]}>
-                Welcome back,
-              </ThemedText>
-              <ThemedText style={[styles.username, { color: currentTheme.colors.accent }]}>
-                {stats?.username}
-              </ThemedText>
+            {/* Header */}
+            <View style={styles.header}>
+              <View>
+                <ThemedText style={[styles.welcomeText, { color: currentTheme.colors.accent }]}>
+                  Welcome back,
+                </ThemedText>
+                <ThemedText style={[styles.username, { color: currentTheme.colors.accent }]}>
+                  {stats?.username}
+                </ThemedText>
+              </View>
+              <View style={[styles.coinsContainer, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
+                <MaterialCommunityIcons name="currency-usd" size={20} color={currentTheme.colors.accent} />
+                <ThemedText style={[styles.coinsText, { color: currentTheme.colors.accent }]}>
+                  {stats?.coins}
+                </ThemedText>
+              </View>
             </View>
-            <View style={[styles.coinsContainer, { backgroundColor: `${currentTheme.colors.accent}20` }]}>
-              <MaterialCommunityIcons name="currency-usd" size={20} color={currentTheme.colors.accent} />
-              <ThemedText style={[styles.coinsText, { color: currentTheme.colors.accent }]}>
-                {stats?.coins}
-              </ThemedText>
-            </View>
-          </View>
 
-          {/* Level Progress */}
-          {stats && (
-            <View style={[styles.section, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
-              <View style={styles.sectionHeader}>
-                <MaterialCommunityIcons name="star" size={24} color={currentTheme.colors.accent} />
-                <View style={styles.levelInfo}>
+            {/* Level Progress */}
+            {stats && (
+              <View style={[styles.section, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
+                <View style={styles.sectionHeader}>
+                  <MaterialCommunityIcons name="star" size={24} color={currentTheme.colors.accent} />
+                  <View style={styles.levelInfo}>
+                    <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
+                      Level {stats.stats.level}
+                    </ThemedText>
+                    <ThemedText style={[styles.totalXP, { color: currentTheme.colors.accent }]}>
+                      Total XP: {stats.stats.totalXP}
+                    </ThemedText>
+                  </View>
+                </View>
+                <View style={styles.progressBarContainer}>
+                  <View 
+                    style={[
+                      styles.progressBar, 
+                      { 
+                        width: `${(stats.stats.currentLevelXP / stats.stats.xpForNextLevel) * 100}%`,
+                        backgroundColor: currentTheme.colors.accent 
+                      }
+                    ]} 
+                  />
+                </View>
+                <View style={styles.xpInfoContainer}>
+                  <ThemedText style={[styles.xpText, { color: currentTheme.colors.accent }]}>
+                    {stats.stats.currentLevelXP} / {stats.stats.xpForNextLevel} XP
+                  </ThemedText>
+                  <ThemedText style={[styles.xpNeeded, { color: currentTheme.colors.accent }]}>
+                    {stats.stats.xpForNextLevel - stats.stats.currentLevelXP} XP needed for Level {stats.stats.level + 1}
+                  </ThemedText>
+                </View>
+              </View>
+            )}
+
+            {/* Today's Stats */}
+            {renderStatsCard()}
+
+            {/* Daily Workouts */}
+            {stats && (
+              <View style={[styles.section, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
+                <View style={styles.sectionHeader}>
+                  <MaterialCommunityIcons name="dumbbell" size={24} color={currentTheme.colors.accent} />
                   <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
-                    Level {stats.stats.level}
-                  </ThemedText>
-                  <ThemedText style={[styles.totalXP, { color: currentTheme.colors.accent }]}>
-                    Total XP: {stats.stats.totalXP}
+                    Daily Workouts
                   </ThemedText>
                 </View>
+                <ScrollView 
+                  style={styles.workoutsScrollView} 
+                  showsVerticalScrollIndicator={false}
+                  nestedScrollEnabled={true}
+                >
+                  {renderDailyWorkouts()}
+                </ScrollView>
               </View>
-              <View style={styles.progressBarContainer}>
-                <View 
-                  style={[
-                    styles.progressBar, 
-                    { 
-                      width: `${(stats.stats.currentLevelXP / stats.stats.xpForNextLevel) * 100}%`,
-                      backgroundColor: currentTheme.colors.accent 
-                    }
-                  ]} 
-                />
-              </View>
-              <View style={styles.xpInfoContainer}>
-                <ThemedText style={[styles.xpText, { color: currentTheme.colors.accent }]}>
-                  {stats.stats.currentLevelXP} / {stats.stats.xpForNextLevel} XP
-                </ThemedText>
-                <ThemedText style={[styles.xpNeeded, { color: currentTheme.colors.accent }]}>
-                  {stats.stats.xpForNextLevel - stats.stats.currentLevelXP} XP needed for Level {stats.stats.level + 1}
-                </ThemedText>
-              </View>
-            </View>
-          )}
+            )}
 
-          {/* Today's Stats */}
-          {renderStatsCard()}
+            {/* Additional Workouts */}
+            {stats && (
+              <AdditionalWorkouts 
+                additionalWorkouts={stats.additionalWorkouts}
+                currentTheme={currentTheme}
+                onWorkoutAdded={() => loadDashboardData(true)}
+                onWorkoutRemoved={handleRemoveAdditionalWorkout}
+                updateXPAfterWorkoutChange={updateXPAfterWorkoutChange}
+                userWeight={stats.userWeight}
+                isRefreshing={refreshing}
+              />
+            )}
+          </ThemedView>
+        </ScrollView>
 
-          {/* Daily Workouts */}
-          {stats && (
-            <View style={[styles.section, { backgroundColor: `${currentTheme.colors.accent}15` }]}>
-              <View style={styles.sectionHeader}>
-                <MaterialCommunityIcons name="dumbbell" size={24} color={currentTheme.colors.accent} />
-                <ThemedText style={[styles.sectionTitle, { color: currentTheme.colors.accent }]}>
-                  Daily Workouts
-                </ThemedText>
-              </View>
-              <ScrollView 
-                style={styles.workoutsScrollView} 
-                showsVerticalScrollIndicator={false}
-                nestedScrollEnabled={true}
-              >
-                {renderDailyWorkouts()}
-              </ScrollView>
-            </View>
-          )}
-
-          {/* Additional Workouts */}
-          {stats && (
-            <AdditionalWorkouts 
-              additionalWorkouts={stats.additionalWorkouts}
-              currentTheme={currentTheme}
-              onWorkoutAdded={() => loadDashboardData(true)}
-              onWorkoutRemoved={handleRemoveAdditionalWorkout}
-              updateXPAfterWorkoutChange={updateXPAfterWorkoutChange}
-              userWeight={stats.userWeight}
-              isRefreshing={refreshing}
-            />
-          )}
-        </ThemedView>
-      </ScrollView>
-
-      {/* Edit Progress Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showEditModal}
-        onRequestClose={() => {
-          setShowEditModal(false);
-          setProgressValue('');
-          setEditingWorkout(null);
-          setWorkoutIntensity('Medium');
-        }}
-      >
-        <View style={{
-          flex: 1,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: 20,
-        }}>
+        {/* Edit Progress Modal */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={showEditModal}
+          onRequestClose={() => {
+            setShowEditModal(false);
+            setProgressValue('');
+            setEditingWorkout(null);
+            setWorkoutIntensity('Medium');
+          }}
+        >
           <View style={{
-            width: '90%',
-            backgroundColor: currentTheme.colors.background,
-            borderRadius: 16,
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            justifyContent: 'center',
+            alignItems: 'center',
             padding: 20,
-            borderWidth: 1,
-            borderColor: currentTheme.colors.accent,
           }}>
-            <Text style={{
-              fontSize: 20,
-              fontWeight: '600',
-              color: currentTheme.colors.text,
-              marginBottom: 20,
-            }}>
-              Update {editingWorkout?.name} Progress
-            </Text>
-            
-            <Text style={{
-              fontSize: 16, 
-              marginBottom: 8, 
-              color: currentTheme.colors.text
-            }}>
-              Value
-            </Text>
-            <TextInput
-              style={{
-                height: 48,
-                borderWidth: 1,
-                borderRadius: 8,
-                padding: 12,
-                fontSize: 16,
-                marginBottom: 20,
-                backgroundColor: currentTheme.colors.background,
-                color: currentTheme.colors.text,
-                borderColor: currentTheme.colors.accent,
-              }}
-              value={progressValue}
-              onChangeText={setProgressValue}
-              keyboardType="numeric"
-              placeholder={`Enter value in ${editingWorkout?.unit}`}
-              placeholderTextColor={`${currentTheme.colors.text}50`}
-            />
-
-            {/* Intensity Selection */}
-            {editingWorkout && (
-              <>
-                <Text style={{
-                  fontSize: 16, 
-                  marginBottom: 8, 
-                  color: currentTheme.colors.text
-                }}>
-                  Intensity
-                </Text>
-                <View style={{ 
-                  flexDirection: 'row', 
-                  marginBottom: 16, 
-                  flexWrap: 'wrap',
-                  gap: 8,
-                }}>
-                  {getAvailableIntensitiesForWorkoutType(editingWorkout.name).map((intensity: string) => (
-                    <TouchableOpacity
-                      key={intensity}
-                      style={{
-                        paddingVertical: 8,
-                        paddingHorizontal: 16,
-                        borderRadius: 24,
-                        borderWidth: 1,
-                        borderColor: currentTheme.colors.accent,
-                        backgroundColor: workoutIntensity === intensity ? currentTheme.colors.accent : 'transparent',
-                      }}
-                      onPress={() => setWorkoutIntensity(intensity)}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: '500',
-                          color: workoutIntensity === intensity ? '#fff' : currentTheme.colors.text,
-                        }}
-                      >
-                        {intensity}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
-
-            {/* Estimated Calories */}
-            {editingWorkout && (
-              <View style={{
-                marginBottom: 20,
-                padding: 12,
-                backgroundColor: `${currentTheme.colors.accent}15`,
-                borderRadius: 8,
-              }}>
-                <Text style={{
-                  fontSize: 14,
-                  color: currentTheme.colors.text,
-                  textAlign: 'center',
-                }}>
-                  Estimated calories: {calculateCaloriesForWorkout({ 
-                    ...editingWorkout, 
-                    currentValue: parseFloat(progressValue) || 0,
-                    intensity: workoutIntensity
-                  }, stats?.userWeight || 70)} cal
-                </Text>
-              </View>
-            )}
-            
             <View style={{
-              flexDirection: 'row',
-              justifyContent: 'flex-end',
-              gap: 12,
+              width: '90%',
+              backgroundColor: currentTheme.colors.background,
+              borderRadius: 16,
+              padding: 20,
+              borderWidth: 1,
+              borderColor: currentTheme.colors.accent,
             }}>
-              <TouchableOpacity
+              <Text style={{
+                fontSize: 20,
+                fontWeight: '600',
+                color: currentTheme.colors.text,
+                marginBottom: 20,
+              }}>
+                Update {editingWorkout?.name} Progress
+              </Text>
+              
+              <Text style={{
+                fontSize: 16, 
+                marginBottom: 8, 
+                color: currentTheme.colors.text
+              }}>
+                Value
+              </Text>
+              <TextInput
                 style={{
-                  paddingVertical: 12,
-                  paddingHorizontal: 24,
+                  height: 48,
+                  borderWidth: 1,
                   borderRadius: 8,
-                  minWidth: 100,
-                  alignItems: 'center',
-                  backgroundColor: currentTheme.colors.error
-                }}
-                onPress={() => {
-                  setShowEditModal(false);
-                  setProgressValue('');
-                  setEditingWorkout(null);
-                  setWorkoutIntensity('Medium');
-                }}
-              >
-                <Text style={{
-                  color: '#fff',
-                  fontWeight: '600',
+                  padding: 12,
                   fontSize: 16,
-                }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={{
-                  paddingVertical: 12,
-                  paddingHorizontal: 24,
-                  borderRadius: 8,
-                  minWidth: 100,
-                  alignItems: 'center',
-                  backgroundColor: currentTheme.colors.accent
+                  marginBottom: 20,
+                  backgroundColor: currentTheme.colors.background,
+                  color: currentTheme.colors.text,
+                  borderColor: currentTheme.colors.accent,
                 }}
-                onPress={() => {
-                  if (editingWorkout) {
-                    // Update the workout with the new intensity
-                    const updatedWorkout = { 
-                      ...editingWorkout,
+                value={progressValue}
+                onChangeText={setProgressValue}
+                keyboardType="numeric"
+                placeholder={`Enter value in ${editingWorkout?.unit}`}
+                placeholderTextColor={`${currentTheme.colors.text}50`}
+              />
+
+              {/* Intensity Selection */}
+              {editingWorkout && (
+                <>
+                  <Text style={{
+                    fontSize: 16, 
+                    marginBottom: 8, 
+                    color: currentTheme.colors.text
+                  }}>
+                    Intensity
+                  </Text>
+                  <View style={{ 
+                    flexDirection: 'row', 
+                    marginBottom: 16, 
+                    flexWrap: 'wrap',
+                    gap: 8,
+                  }}>
+                    {getAvailableIntensitiesForWorkoutType(editingWorkout.name).map((intensity: string) => (
+                      <TouchableOpacity
+                        key={intensity}
+                        style={{
+                          paddingVertical: 8,
+                          paddingHorizontal: 16,
+                          borderRadius: 24,
+                          borderWidth: 1,
+                          borderColor: currentTheme.colors.accent,
+                          backgroundColor: workoutIntensity === intensity ? currentTheme.colors.accent : 'transparent',
+                        }}
+                        onPress={() => setWorkoutIntensity(intensity)}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 14,
+                            fontWeight: '500',
+                            color: workoutIntensity === intensity ? '#fff' : currentTheme.colors.text,
+                          }}
+                        >
+                          {intensity}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
+
+              {/* Estimated Calories */}
+              {editingWorkout && (
+                <View style={{
+                  marginBottom: 20,
+                  padding: 12,
+                  backgroundColor: `${currentTheme.colors.accent}15`,
+                  borderRadius: 8,
+                }}>
+                  <Text style={{
+                    fontSize: 14,
+                    color: currentTheme.colors.text,
+                    textAlign: 'center',
+                  }}>
+                    Estimated calories: {calculateCaloriesForWorkout({ 
+                      ...editingWorkout, 
+                      currentValue: parseFloat(progressValue) || 0,
                       intensity: workoutIntensity
-                    };
-                    setEditingWorkout(updatedWorkout);
-                    handleUpdateProgress();
-                  }
-                }}
-              >
-                <Text style={{
-                  color: '#fff',
-                  fontWeight: '600',
-                  fontSize: 16,
-                }}>Save</Text>
-              </TouchableOpacity>
+                    }, stats?.userWeight || 70)} cal
+                  </Text>
+                </View>
+              )}
+              
+              <View style={{
+                flexDirection: 'row',
+                justifyContent: 'flex-end',
+                gap: 12,
+              }}>
+                <TouchableOpacity
+                  style={{
+                    paddingVertical: 12,
+                    paddingHorizontal: 24,
+                    borderRadius: 8,
+                    minWidth: 100,
+                    alignItems: 'center',
+                    backgroundColor: currentTheme.colors.error
+                  }}
+                  onPress={() => {
+                    setShowEditModal(false);
+                    setProgressValue('');
+                    setEditingWorkout(null);
+                    setWorkoutIntensity('Medium');
+                  }}
+                >
+                  <Text style={{
+                    color: '#fff',
+                    fontWeight: '600',
+                    fontSize: 16,
+                  }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{
+                    paddingVertical: 12,
+                    paddingHorizontal: 24,
+                    borderRadius: 8,
+                    minWidth: 100,
+                    alignItems: 'center',
+                    backgroundColor: currentTheme.colors.accent
+                  }}
+                  onPress={() => {
+                    if (editingWorkout) {
+                      // Update the workout with the new intensity
+                      const updatedWorkout = { 
+                        ...editingWorkout,
+                        intensity: workoutIntensity
+                      };
+                      setEditingWorkout(updatedWorkout);
+                      handleUpdateProgress();
+                    }
+                  }}
+                >
+                  <Text style={{
+                    color: '#fff',
+                    fontWeight: '600',
+                    fontSize: 16,
+                  }}>Save</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+        </Modal>
+      </SafeAreaView>
+    </MetallicBackgroundWrapper>
   );
-
-  // Return after all hooks are initialized
-  return loading || !stats ? loadingUI : mainUI;
+  
+  // Render loading or main UI
+  return loading ? loadingUI : mainUI;
 }
 
 const styles = StyleSheet.create({

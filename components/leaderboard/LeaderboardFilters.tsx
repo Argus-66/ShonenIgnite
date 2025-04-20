@@ -108,6 +108,26 @@ export const LeaderboardFilters = ({
     }
   };
 
+  const modalContainerStyle = {
+    ...styles.modalContainer,
+    backgroundColor: currentTheme.colors.leaderboard?.podiumBackground || currentTheme.colors.background,
+  };
+
+  const modalHeaderStyle = {
+    ...styles.modalHeader,
+    borderBottomColor: currentTheme.colors.border,
+  };
+
+  const searchContainerStyle = {
+    ...styles.searchContainer,
+    borderBottomColor: currentTheme.colors.border,
+  };
+
+  const optionItemStyle = {
+    ...styles.optionItem,
+    borderBottomColor: currentTheme.colors.border,
+  };
+
   return (
     <View style={styles.container}>
       {/* Ranking Level Selector */}
@@ -129,9 +149,13 @@ export const LeaderboardFilters = ({
                 key={level.key}
                 style={[
                   styles.filterButton,
+                  { 
+                    borderColor: isSelected ? currentTheme.colors.accent : currentTheme.colors.border,
+                    backgroundColor: isSelected 
+                      ? `${currentTheme.colors.accent}30` 
+                      : currentTheme.colors.leaderboard?.podiumBackground || currentTheme.colors.card
+                  },
                   isSelected && { 
-                    backgroundColor: `${currentTheme.colors.accent}30`,
-                    borderColor: currentTheme.colors.accent,
                     borderWidth: 1.5
                   },
                   needsSelector && { paddingRight: 8, minWidth: 130 }
@@ -251,20 +275,20 @@ export const LeaderboardFilters = ({
       {/* Country Selector Modal */}
       <Modal
         visible={showCountrySelector}
-        transparent
         animationType="slide"
+        transparent={true}
         onRequestClose={() => setShowCountrySelector(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, { backgroundColor: currentTheme.colors.background }]}>
-            <View style={styles.modalHeader}>
+          <View style={modalContainerStyle}>
+            <View style={modalHeaderStyle}>
               <ThemedText style={styles.modalTitle}>Select Country</ThemedText>
               <TouchableOpacity onPress={() => setShowCountrySelector(false)}>
-                <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.text} />
+                <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.textPrimary} />
               </TouchableOpacity>
             </View>
             
-            <View style={styles.searchContainer}>
+            <View style={searchContainerStyle}>
               <MaterialCommunityIcons
                 name="magnify"
                 size={20}
@@ -312,10 +336,7 @@ export const LeaderboardFilters = ({
                 keyExtractor={(item) => item}
                 renderItem={({ item }) => (
                   <TouchableOpacity
-                    style={[
-                      styles.optionItem,
-                      selectedCountry === item && { backgroundColor: `${currentTheme.colors.accent}20` }
-                    ]}
+                    style={optionItemStyle}
                     onPress={() => {
                       if (onCountryChange) onCountryChange(item);
                       setShowCountrySelector(false);
@@ -336,16 +357,16 @@ export const LeaderboardFilters = ({
       {/* Continent Selector Modal */}
       <Modal
         visible={showContinentSelector}
-        transparent
         animationType="slide"
+        transparent={true}
         onRequestClose={() => setShowContinentSelector(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, { backgroundColor: currentTheme.colors.background }]}>
-            <View style={styles.modalHeader}>
+          <View style={modalContainerStyle}>
+            <View style={modalHeaderStyle}>
               <ThemedText style={styles.modalTitle}>Select Continent</ThemedText>
               <TouchableOpacity onPress={() => setShowContinentSelector(false)}>
-                <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.text} />
+                <MaterialCommunityIcons name="close" size={24} color={currentTheme.colors.textPrimary} />
               </TouchableOpacity>
             </View>
             
@@ -354,10 +375,7 @@ export const LeaderboardFilters = ({
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={[
-                    styles.optionItem,
-                    selectedContinent === item && { backgroundColor: `${currentTheme.colors.accent}20` }
-                  ]}
+                  style={optionItemStyle}
                   onPress={() => {
                     if (onContinentChange) onContinentChange(item);
                     setShowContinentSelector(false);
@@ -406,8 +424,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   buttonText: {
     fontSize: 14,
@@ -441,7 +457,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   modalTitle: {
     fontSize: 18,
@@ -453,7 +468,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
   searchIcon: {
     marginRight: 8,
@@ -473,7 +487,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
   noResultsContainer: {
     padding: 30,
